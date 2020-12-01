@@ -9,11 +9,13 @@ def voxelize(points: torch.Tensor, voxel_size):
 
     return: voxelize coordinates
     """
+    print("points shape", points.shape)
+
     voxel_size = torch.tensor(voxel_size).to(points.device)
     key_points = points / voxel_size
     key_points = key_points.long()
     key_points = torch.unique(key_points, dim=0)
-    return key_points
+    return key_points.float()
 
 def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu):
     """
@@ -32,7 +34,7 @@ def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu):
 
     return downsample_graph, upsample_graph
 
-def self_level_graph(key_points: torch.Tensor, radiu, loop: bool=False):
+def intra_level_graph(key_points: torch.Tensor, radiu, loop: bool=False):
     """
     args:
         key_points: nodes of specific level
@@ -41,8 +43,8 @@ def self_level_graph(key_points: torch.Tensor, radiu, loop: bool=False):
     return: self_level_graph E x 2, [center_node, neighbor_node]
     """
     batch_x = torch.tensor([0]*len(key_points)).to(key_points.device)
-    self_graph = radius_graph(key_points, radiu, batch_x, loop)
-    return self_graph
+    intra_graph = radius_graph(key_points, radiu, batch_x, loop)
+    return intra_graph
 
 
 if __name__ == "__main__":
@@ -55,7 +57,7 @@ if __name__ == "__main__":
     print("downsample_graph.shape", downsample_graph.shape)
     print("upsample_graph.shape", upsample_graph.shape)
 
-    self_graph = self_level_graph(key_points, 2)
+    intra_graph = intra_level_graph(key_points, 2)
     ### test distance
     center_nodes = key_points[self_graph[0]]
     neighbor_nodes = key_points[self_graph[1]]
