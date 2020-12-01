@@ -33,7 +33,7 @@ class BasicBlock(nn.Module):
             out_int_channels: inter channels of out_linear network
 
         """
-        super(DownsampleBlock, self).__init__()
+        super(BasicBlock, self).__init__()
         assert in_inter_channels[-1] == out_inter_channels[0]
 
         self.inplanes = inplanes
@@ -58,7 +58,7 @@ class BasicBlock(nn.Module):
         neighbor_coors = last_coors[last_indices] # E x 3
         neighbor_features = last_features[last_indices] # E x f
         neighbor_features = torch.cat([neighbor_features, neighbor_coors-center_coors], dim=1) # E x (3+f)
-        neighbor_features = self.linear(neighbor_features)
+        neighbor_features = self.in_linear(neighbor_features)
 
         current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
         return self.out_linear(current_features)
