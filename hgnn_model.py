@@ -68,13 +68,14 @@ class DownsampleBlock(nn.Module):
         super(DownsampleBlock, self).__init__()
         self.basic_block = BasicBlock(in_inter_channels, out_inter_channels)
 
-    def forward(self, self, last_features, current_coors, edge):
+    def forward(self, last_features, current_coors, edge):
         return self.basic_block(last_coors, last_features, current_coors, edge)
 
 class GraphBlock(nn.Module):
-    def __init__(self, in_inter_channels, out_inter_channels):
+    def __init__(self, in_inter_channels, out_inter_channels, after_cat_inter_channels):
         super(GraphBlock, self).__init__()
         self.basic_block = BasicBlock(in_inter_channels, out_inter_channels)
+        self.after_cat_linear = multi_layer_neural_network_fn(after_cat_inter_channels)
 
     def forward(self, coors, features, edge):
         """
@@ -88,7 +89,7 @@ class GraphBlock(nn.Module):
         update_features = self.basic_block(coors, features, coors, edge) # N x f, can be changed to attention mode
         assert update_features.shape[1] == features.shape[1]
 
-        return features + update_features
+        return self.after_cat_linear(features + update_features)
 
 class UpsampleBlock(nn.Module):
     def __init__(self, in_inter_channels, out_inter_channels, before_cat_inter_channels, after_cat_inter_channels):
