@@ -47,7 +47,8 @@ class Dataset():
 if __name__ == "__main__":
     from mmcv import Config
     #cfg = Config.fromfile("config/dataset/kitti-3d-car.py")
-    cfg = Config.fromfile("config/dataset/kitti-3d-3class.py")
+    # cfg = Config.fromfile("config/dataset/kitti-3d-3class.py")
+    cfg = Config.fromfile("./configs/_base_/datasets/kitti-3d-3class.py")
     dataset_cfg = cfg.data.train
     dataset = Dataset(dataset_cfg, [[0.05, 0.05, 0.1]], [0, -40, -3, 70.4, 40, 1])
     print("len", len(dataset))
