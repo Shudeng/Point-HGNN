@@ -15,7 +15,7 @@ def voxelize(points: torch.Tensor, voxel_size):
     key_points = points / voxel_size
     key_points = key_points.long()
     key_points = torch.unique(key_points, dim=0)
-    return key_points.float()
+    return key_points.float().to(points.device)
 
 def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu, max_num_neighbors=32):
     """
@@ -32,7 +32,7 @@ def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu, max
     downsample_graph = radius(points, key_points, radiu, batch_x, batch_y, max_num_neighbors=max_num_neighbors)
     # upsample_graph = radius(key_points, points, radiu, batch_y, batch_x, max_num_neighbors=max_num_neighbors)
     upsample_graph = downsample_graph[[1, 0], :]
-    return downsample_graph, upsample_graph
+    return downsample_graph.to(points.device), upsample_graph.to(points.device)
 
 def intra_level_graph(key_points: torch.Tensor, radiu, loop: bool=False):
     """

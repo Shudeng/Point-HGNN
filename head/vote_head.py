@@ -157,6 +157,9 @@ class VoteHead(nn.Module):
         # 2. aggregate vote_points
         if sample_mod == 'vote':
             # use fps in vote_aggregation
+
+            print("features.shape", vote_features.shape)
+            print("vote_points.shape", vote_points.shape)
             aggregation_inputs = dict(
                 points_xyz=vote_points, features=vote_features)
         elif sample_mod == 'seed':

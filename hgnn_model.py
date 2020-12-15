@@ -13,7 +13,8 @@ def multi_layer_neural_network_fn(Ks):
         linears += [
             nn.Linear(Ks[i - 1], Ks[i]),
             nn.ReLU(),
-            nn.BatchNorm1d(Ks[i])]
+        #    nn.BatchNorm1d(Ks[i])
+        ]
     return nn.Sequential(*linears)
 
 
@@ -27,7 +28,8 @@ def max_aggregation_fn(features, index, l):
     return:
         set_features: l x dim
     """
-    index = index.unsqueeze(-1).expand(-1, features.shape[-1])  # N x dim
+    index = index.unsqueeze(-1).expand(-1, features.shape[-1])
+    index = index.to(features.device)  # N x dim
     set_features = torch.zeros((l, features.shape[-1]), device=features.device).permute(1, 0).contiguous()  # len x dim
     set_features, argmax = scatter_max(features.permute(1, 0), index.permute(1, 0), out=set_features)
     set_features = set_features.permute(1, 0)
@@ -69,9 +71,9 @@ class BasicBlock(nn.Module):
         neighbor_features = last_features[last_indices]  # E x f
         neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
 
+        print(self.in_linear)
         neighbor_features = self.in_linear(neighbor_features)
         print("neighbor_features.shape", neighbor_features.shape)
-        print(self.in_linear)
 
         current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
         return self.out_linear(current_features)
@@ -159,10 +161,6 @@ class HGNN(nn.Module):
         self.upsample2 = UpsampleBlock((128 + 3, 64), (64, 64), (64, 64), (64, 64))
         self.graph1_update = GraphBlock((64 + 3, 64), (64, 64), (64, 64))
         self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
-        from head.plain_head import ClassAwarePredictor
-        self.predictor = ClassAwarePredictor(num_classes, box_encoding_len)
-
-        """
 
 
         if head_type == 'PlainHead':
@@ -185,7 +183,6 @@ class HGNN(nn.Module):
             #                           pred_layer_cfg=None)
         else:
             raise NotImplementedError('Other heads are not fulfilled yet.')
-        """
 
     def get_levels_coordinates(self, point_coordinates, voxel_sizes):
         """
@@ -225,7 +222,7 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         print("points", points.data)
-        points = points.data[0][0]
+        points = points.data[0][0].cuda()
         print("points", points.shape)
 
         ## step 1: construct graph
@@ -266,11 +263,11 @@ class HGNN(nn.Module):
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, inter_graphs["1_0"])
 
         print('size of extracted point features: ', p1.size())  # the first downsample graph
-        point_features = p1
+        #point_features = p1
         # (logits, box_encodings) = self.predictor(point_features)
-        results = self.predictor(point_features)
+        #results = self.predictor(point_features)
+        #print("results.shape", results[0].shape)
 
-        """
         ## step 3: feed features to classify and regress box via head
         if self.head_type == 'PlainHead':
             # feed the features of the first downsample graph
@@ -278,7 +275,6 @@ class HGNN(nn.Module):
             # (logits, box_encodings) = self.predictor(point_features)
             results = self.predictor(point_features)
         elif self.head_type == 'VoteHead':
-            pass
             # feed the features combined with the 1st, 2nd, and 3rd downsample graph
 
             # since VoteHead may need indices of samples (in 'vote' mode, indices are not needed),
@@ -303,15 +299,15 @@ class HGNN(nn.Module):
             fp_features = [p3.unsqueeze(0).permute(0, 2, 1).cuda(), 
                            p2.unsqueeze(0).permute(0, 2, 1).cuda(), 
                            p1.unsqueeze(0).permute(0, 2, 1).cuda()]
-            fp_indices = [indices_3.cuda(), 
-                          indices_2.unsqueeze(0).cuda(), 
-                          indices_1.unsqueeze(0).cuda()]
+            fp_indices = [indices_3, 
+                          indices_2.unsqueeze(0), 
+                          indices_1.unsqueeze(0)]
             feat_dict = {'fp_xyz': fp_xyz,
                         'fp_features': fp_features,
                         'fp_indices': fp_indices,
             }
             results = self.predictor(feat_dict, sample_mod='vote')
-        """
+        print("results", results)
 
         return results
 
