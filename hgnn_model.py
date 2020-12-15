@@ -70,10 +70,7 @@ class BasicBlock(nn.Module):
         neighbor_coors = last_coors[last_indices]  # E x 3
         neighbor_features = last_features[last_indices]  # E x f
         neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
-
-        print(self.in_linear)
         neighbor_features = self.in_linear(neighbor_features)
-        print("neighbor_features.shape", neighbor_features.shape)
 
         current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
         return self.out_linear(current_features)
@@ -220,10 +217,14 @@ class HGNN(nn.Module):
         # Note: currently we only support one batch for single gpu.
         #       multi-batch for single gpu need further work.
 
-        #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
-        print("points", points.data)
-        points = points.data[0][0].cuda()
-        print("points", points.shape)
+        print(points)
+        print(len(points))
+
+        assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
+        points = points[0]
+        #print("points", points.data)
+        #points = points.data[0][0].cuda()
+        #print("points", points.shape)
 
         ## step 1: construct graph
         coordinates = [points[:, :3]] + self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)

@@ -55,7 +55,7 @@ def main():
     # val_dataset = build_dataset(val_dataset)
     if args.distributed:
         dist_params = {"backend": args.backend}
-        #init_dist(args.launcher, **dist_params)
+        init_dist(args.launcher, **dist_params)
 
     cfg.data.samples_per_gpu = 1
     print("samples_per_gpu", cfg.data.samples_per_gpu)
@@ -67,8 +67,8 @@ def main():
         cfg.data.workers_per_gpu,
         # cfg.gpus will be ignored if distributed
         len(args.gpu_ids),
-        #dist=args.distributed,
-        dist=False,
+        dist=args.distributed,
+#        dist=False,
         seed=args.seed)
 
     # print(train_dataloader)
@@ -91,14 +91,12 @@ def main():
 
     model = model.cuda()
     
-    """
     model = MMDistributedDataParallel(
         model.cuda(),
         device_ids=[torch.cuda.current_device()],
         broadcast_buffers=False,
         find_unused_parameters=args.find_unused_parameters
     )
-    """
 
     data = next(itr)
     print("data.keys", data.keys())
