@@ -91,6 +91,7 @@ def main():
         broadcast_buffers=False,
         find_unused_parameters=args.find_unused_parameters
     )
+    # model = model.cuda()
 
     data = next(itr)
     print("data.keys", data.keys())

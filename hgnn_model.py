@@ -215,6 +215,9 @@ class HGNN(nn.Module):
         #       multi-batch for single gpu need further work.
 
         assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
+        # print(points)
+        # points = points.data
+        # points = points[0][0]
         points = points[0]
 
         ## step 1: construct graph
