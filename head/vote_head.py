@@ -145,8 +145,8 @@ class VoteHead(nn.Module):
             feat_dict)
 
         # 1. generate vote_points from seed_points
-        vote_points, vote_features, vote_offset = self.vote_module(
-            seed_points, seed_features)
+        vote_points, vote_features, vote_offset = self.vote_module(seed_points, seed_features)
+
         results = dict(
             seed_points=seed_points,
             seed_indices=seed_indices,
@@ -157,6 +157,9 @@ class VoteHead(nn.Module):
         # 2. aggregate vote_points
         if sample_mod == 'vote':
             # use fps in vote_aggregation
+
+            print("features.shape", vote_features.shape)
+            print("vote_points.shape", vote_points.shape)
             aggregation_inputs = dict(
                 points_xyz=vote_points, features=vote_features)
         elif sample_mod == 'seed':

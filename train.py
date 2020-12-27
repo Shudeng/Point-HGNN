@@ -41,9 +41,12 @@ def main():
     # print(cfg.model.bbox_head)
     # if args.options is not None:
     #     cfg.merge_from_dict(args.options)
+
+    """
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
         print("local_rank", args.local_rank)
+    """
 
     train_dataset = build_dataset(cfg.data.train)
 
@@ -65,6 +68,7 @@ def main():
         # cfg.gpus will be ignored if distributed
         len(args.gpu_ids),
         dist=args.distributed,
+#        dist=False,
         seed=args.seed)
 
     # print(train_dataloader)
@@ -85,6 +89,8 @@ def main():
     model = HGNN(downsample_voxel_sizes, inter_radius, intra_radius,
                  max_num_neighbors, num_classes, head_type, box_encoding_len, **cfg)  # **cfg.model.bbox_head
 
+    model = model.cuda()
+    
     model = MMDistributedDataParallel(
         model.cuda(),
         device_ids=[torch.cuda.current_device()],

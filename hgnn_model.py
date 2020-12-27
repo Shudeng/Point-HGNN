@@ -1,7 +1,7 @@
 import torch
 from torch import nn
-from mmdet3d.models.detectors.single_stage import SingleStage3DDetector
-from mmdet3d.models.detectors import Base3DDetector
+#from mmdet3d.models.detectors.single_stage import SingleStage3DDetector
+#from mmdet3d.models.detectors import Base3DDetector
 from torch_scatter import scatter_max
 
 from construct_graph import voxelize, inter_level_graph, intra_level_graph
@@ -13,7 +13,8 @@ def multi_layer_neural_network_fn(Ks):
         linears += [
             nn.Linear(Ks[i - 1], Ks[i]),
             nn.ReLU(),
-            nn.BatchNorm1d(Ks[i])]
+        #    nn.BatchNorm1d(Ks[i])
+        ]
     return nn.Sequential(*linears)
 
 
@@ -27,7 +28,8 @@ def max_aggregation_fn(features, index, l):
     return:
         set_features: l x dim
     """
-    index = index.unsqueeze(-1).expand(-1, features.shape[-1])  # N x dim
+    index = index.unsqueeze(-1).expand(-1, features.shape[-1])
+    index = index.to(features.device)  # N x dim
     set_features = torch.zeros((l, features.shape[-1]), device=features.device).permute(1, 0).contiguous()  # len x dim
     set_features, argmax = scatter_max(features.permute(1, 0), index.permute(1, 0), out=set_features)
     set_features = set_features.permute(1, 0)
@@ -157,12 +159,13 @@ class HGNN(nn.Module):
         self.graph1_update = GraphBlock((64 + 3, 64), (64, 64), (64, 64))
         self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
 
+
         if head_type == 'PlainHead':
             # the same head as Point-GNN
             from head.plain_head import ClassAwarePredictor
             self.predictor = ClassAwarePredictor(num_classes, box_encoding_len)
         elif head_type == 'VoteHead':
-            # from mmdet3d.models.dense_heads.vote_head import VoteHead
+#             from mmdet3d.models.dense_heads.vote_head import VoteHead
             from head.vote_head import VoteHead
             # self.predictor = VoteHead(num_classes, **cfg['model']['bbox_head'])
             self.predictor = VoteHead(num_classes, cfg['model']['bbox_coder'],
@@ -214,11 +217,17 @@ class HGNN(nn.Module):
         # Note: currently we only support one batch for single gpu.
         #       multi-batch for single gpu need further work.
 
+        print(points)
+        print(len(points))
+
         assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         # print(points)
         # points = points.data
         # points = points[0][0]
         points = points[0]
+        #print("points", points.data)
+        #points = points.data[0][0].cuda()
+        #print("points", points.shape)
 
         ## step 1: construct graph
         coordinates = [points[:, :3]] + self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
@@ -258,6 +267,10 @@ class HGNN(nn.Module):
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, inter_graphs["1_0"])
 
         print('size of extracted point features: ', p1.size())  # the first downsample graph
+        #point_features = p1
+        # (logits, box_encodings) = self.predictor(point_features)
+        #results = self.predictor(point_features)
+        #print("results.shape", results[0].shape)
 
         ## step 3: feed features to classify and regress box via head
         if self.head_type == 'PlainHead':
@@ -277,19 +290,19 @@ class HGNN(nn.Module):
             # when updating batch from 1 to b, the 2nd parameter of gather (i.e. dim) needs to be changed from 0 to 1.
             # indices_1 = torch.gather(indices_0, 0, indices_1)
             indices_2 = sample_indices(inter_graphs["1_2"])
-            indices_2 = indices_1[indices_2]
+#            indices_2 = indices_1[indices_2]
             indices_3 = []  # uncomment the next two lines (error?).
             # indices_3 = sample_indices(inter_graphs["2_3"])
             # indices_3 = indices_1[indices_2[indices_3]]
 
             # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
             # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
-            fp_xyz = [coordinates[3].unsqueeze(0), 
-                      coordinates[2].unsqueeze(0), 
-                      coordinates[1].unsqueeze(0)]
-            fp_features = [p3.unsqueeze(0).permute(0, 2, 1), 
-                           p2.unsqueeze(0).permute(0, 2, 1), 
-                           p1.unsqueeze(0).permute(0, 2, 1)]
+            fp_xyz = [coordinates[3].unsqueeze(0).cuda(), 
+                      coordinates[2].unsqueeze(0).cuda(), 
+                      coordinates[1].unsqueeze(0).cuda()]
+            fp_features = [p3.unsqueeze(0).permute(0, 2, 1).cuda(), 
+                           p2.unsqueeze(0).permute(0, 2, 1).cuda(), 
+                           p1.unsqueeze(0).permute(0, 2, 1).cuda()]
             fp_indices = [indices_3, 
                           indices_2.unsqueeze(0), 
                           indices_1.unsqueeze(0)]
@@ -298,6 +311,7 @@ class HGNN(nn.Module):
                         'fp_indices': fp_indices,
             }
             results = self.predictor(feat_dict, sample_mod='vote')
+        print("results", results)
 
         return results
 
