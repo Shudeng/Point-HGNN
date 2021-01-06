@@ -1,4 +1,5 @@
 import torch
+from hgnn_backbone import HGNN
 
 
 def sample_indices(edges):
@@ -22,3 +23,20 @@ def sample_indices(edges):
         idxs.append(idx)
     # print(idxs)
     return neighbors[idxs]
+
+
+def build_hgnn_backbone(cfg=None):
+    downsample_voxel_sizes = [[0.5, 0.5, 0.5], [0.8, 0.8, 0.8], [1.1, 1.1, 1.1]]
+    inter_radius = [1.0, 1.5, 2.0]
+    intra_radius = [1.5, 2.0, 2.5]
+
+    max_num_neighbors = 256  # 32 is default, 256 is adopted in Point-GNN
+    # (256 for training and all edges for inference)
+
+    backbone = HGNN(downsample_voxel_sizes, inter_radius, intra_radius, max_num_neighbors)
+    return backbone
+
+if __name__ == "__main__":
+    backbone = build_hgnn_backbone()
+    print(backbone)
+

@@ -16,7 +16,6 @@ from mmdet3d.datasets import build_dataset
 from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet.apis import set_random_seed, train_detector
-from hgnn_model import HGNN
 
 
 def parse_args():
@@ -91,8 +90,6 @@ def main():
     else:
         cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)
 
-    print("gpu_ids", cfg.gpu_ids)
-
     if args.autoscale_lr:
         # apply the linear scaling rule (https://arxiv.org/abs/1706.02677)
         cfg.optimizer['lr'] = cfg.optimizer['lr'] * len(cfg.gpu_ids) / 8
@@ -102,7 +99,6 @@ def main():
         distributed = False
     else:
         distributed = True
-        print("cfg.dist_params", cfg.dist_params)
         init_dist(args.launcher, **cfg.dist_params)
 
     # create work_dir
@@ -139,10 +135,18 @@ def main():
     cfg.seed = args.seed
     meta['seed'] = args.seed
 
-#    model = build_detector(
-#        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
+    model = build_detector(
+        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
+#    print("model", model)
+    print("model.backbone", model.backbone)
+    exit(0)
 
-    model = HGNN()
+
+
+
+
+
+
     logger.info(f'Model:\n{model}')
     datasets = [build_dataset(cfg.data.train)]
     if len(cfg.workflow) == 2:
