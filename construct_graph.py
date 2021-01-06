@@ -12,10 +12,23 @@ def voxelize(points: torch.Tensor, voxel_size):
     # print("points shape", points.shape)
 
     voxel_size = torch.tensor(voxel_size).to(points.device)
-    key_points = points / voxel_size
-    key_points = key_points.long()
-    key_points = torch.unique(key_points, dim=0)
-    return key_points.float().to(points.device)
+    rescale_points = points / voxel_size
+    rescale_points = rescale_points.long()
+    unique_rescale_points = torch.unique(rescale_points, dim=0) 
+    key_points = []
+    indices = []
+    for u in unique_rescale_points:
+        for i in range(rescale_points.size(0)):
+            if  torch.equal(rescale_points[i, :], u):
+                key_points.append(points[i, :].unsqueeze(0))
+                indices.append(i)
+                break
+    key_points = torch.cat(key_points, dim=0)
+    # after downsample through voxelize, restore the original coordinates.
+    # if restore through multiply, the error may exist between current float value and original integral value.
+    
+    # return key_points.float().to(points.device)
+    return key_points.to(points.device), torch.tensor(indices)
 
 def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu, max_num_neighbors=32):
     """

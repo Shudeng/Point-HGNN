@@ -2,10 +2,7 @@ import torch
 from torch import nn
 #from mmdet3d.models.detectors.single_stage import SingleStage3DDetector
 #from mmdet3d.models.detectors import Base3DDetector
-from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
 from torch_scatter import scatter_max
-from collections import OrderedDict
-import torch.distributed as dist
 
 from construct_graph import voxelize, inter_level_graph, intra_level_graph
 
@@ -16,7 +13,7 @@ def multi_layer_neural_network_fn(Ks):
         linears += [
             nn.Linear(Ks[i - 1], Ks[i]),
             nn.ReLU(),
-            # nn.BatchNorm1d(Ks[i])
+        #    nn.BatchNorm1d(Ks[i])
         ]
     return nn.Sequential(*linears)
 
@@ -145,9 +142,7 @@ class HGNN(nn.Module):
         self.num_classes = num_classes
         self.head_type = head_type
         self.box_encoding_len = box_encoding_len
-        self.cfg = cfg
-        self.train_cfg = cfg['train_cfg']
-        self.test_cfg = cfg['test_cfg']
+        # self.cfg = cfg
 
         # self.linear = nn.Linear(10, 100)
         self.downsample1 = DownsampleBlock(in_inter_channels=(4+3, 32, 64), out_inter_channels=(64, 64))
@@ -168,16 +163,13 @@ class HGNN(nn.Module):
         if head_type == 'PlainHead':
             # the same head as Point-GNN
             from head.plain_head import ClassAwarePredictor
-            self.bbox_head = ClassAwarePredictor(num_classes, box_encoding_len)
+            self.predictor = ClassAwarePredictor(num_classes, box_encoding_len)
         elif head_type == 'VoteHead':
-            # from mmdet3d.models.dense_heads.vote_head import VoteHead
+#             from mmdet3d.models.dense_heads.vote_head import VoteHead
             from head.vote_head import VoteHead
             # self.predictor = VoteHead(num_classes, **cfg['model']['bbox_head'])
-            self.bbox_head = VoteHead(num_classes, cfg['model']['bbox_coder'],
+            self.predictor = VoteHead(num_classes, cfg['model']['bbox_coder'],
                                          cfg['train_cfg'], cfg['test_cfg'], **cfg['model']['bbox_head'])
-            # bbox_head.update(train_cfg=train_cfg)
-            # bbox_head.update(test_cfg=test_cfg)
-            # self.bbox_head = build_head(bbox_head)
             # train and test cfg may be not needed
             # self.predictor = VoteHead(num_classes,
             #                           bbox_coder,
@@ -210,8 +202,7 @@ class HGNN(nn.Module):
                 points,
                 img_metas,
                 gt_bboxes_3d,
-                gt_labels_3d,
-                mode='train'):
+                gt_labels_3d):
         """args:
             points (list[torch.Tensor]): Points of each batch.
             img_metas (list): Image metas.
@@ -235,7 +226,7 @@ class HGNN(nn.Module):
         # points = points.data
         # points = points[0][0]
         # points = points[0]
-        points = points[0][:100, :]
+        points = points[0][:1000, :]
         #print("points", points.data)
         #points = points.data[0][0].cuda()
         #print("points", points.shape)
@@ -290,14 +281,14 @@ class HGNN(nn.Module):
             # feed the features of the first downsample graph
             point_features = p1
             # (logits, box_encodings) = self.predictor(point_features)
-            bbox_pred = self.bbox_head(point_features)
+            results = self.predictor(point_features)
         elif self.head_type == 'VoteHead':
             # feed the features combined with the 1st, 2nd, and 3rd downsample graph
 
             # since VoteHead may need indices of samples (in 'vote' mode, indices are not needed),
             # for every center point, choose the indice of initial (raw) points as its indice.
-            # from utils import sample_indices
-            # indices_0 = torch.arange(points.size()[0]).to(points.device)
+            from utils import sample_indices
+            indices_0 = torch.arange(points.size()[0]).to(points.device)
             # indices_1 = sample_indices(inter_graphs["0_1"]).to(points.device)
             # gather operation may be redundant if the index of graph's node is fixed,
             # when updating batch from 1 to b, the 2nd parameter of gather (i.e. dim) needs to be changed from 0 to 1.
@@ -328,186 +319,37 @@ class HGNN(nn.Module):
                         'fp_features': fp_features,
                         'fp_indices': fp_indices,
             }
-            if mode == 'train':
-                # bbox_preds = self.bbox_head(feat_dict, sample_mod='vote')
-                bbox_preds = self.bbox_head(feat_dict, sample_mod=self.train_cfg.sample_mod)
-                self.bbox_preds = bbox_preds
-                losses = self.forward_train(points.unsqueeze(0),
-                                   img_metas,
-                                   gt_bboxes_3d,
-                                   gt_labels_3d.long(),)
-                print(losses)
-            elif mode == 'test':
-                bbox_preds = self.bbox_head(feat_dict, sample_mod='seed')
-                self.bbox_preds = bbox_preds
-                bbox_results = self.simple_test(points.unsqueeze(0), img_metas)
-                print(bbox_results)
-        # self.bbox_preds = bbox_preds
-        for k, v in bbox_preds.items():
-            print(k, v.size())
-        return bbox_preds
+            results = self.predictor(feat_dict, sample_mod='vote')
+        # print("results", results)
+
+        return results
 
     def forward_train(self,
                       points,
                       img_metas,
                       gt_bboxes_3d,
-                      gt_labels_3d,
-                      pts_semantic_mask=None,
-                      pts_instance_mask=None,
-                      gt_bboxes_ignore=None):
-        """Forward of training.
-
-        Args:
-            points (list[torch.Tensor]): Points of each batch.
-            img_metas (list): Image metas.
-            gt_bboxes_3d (:obj:`BaseInstance3DBoxes`): gt bboxes of each batch.
-            gt_labels_3d (list[torch.Tensor]): gt class labels of each batch.
-            pts_semantic_mask (None | list[torch.Tensor]): point-wise semantic
-                label of each batch.
-            pts_instance_mask (None | list[torch.Tensor]): point-wise instance
-                label of each batch.
-            gt_bboxes_ignore (None | list[torch.Tensor]): Specify
-                which bounding.
-
-        Returns:
-            dict: Losses.
-        """
+                      gt_labels_3d):
+        points = points[0]
+        points_features = None  # graph(points), using above graph to extract features
         if self.head_type == 'PlainHead':
-            # point_features = p1
-            # bbox_pred = self.bbox_head(point_features)
-            raise NotImplementedError()
+            outputs = self.predictor(points_features)
         elif self.head_type == 'VoteHead':
-            # points_cat = torch.stack(points)
-            # x = self.extract_feat(points_cat)
-            # bbox_preds = self.bbox_head(x, self.train_cfg.sample_mod)
-            bbox_preds = self.bbox_preds
-            # points, gt_bboxes_3d, gt_labels_3d, img_metas = points[0], gt_bboxes_3d[0], gt_labels_3d[0], img_metas[0]
+            pass
 
-            loss_inputs = (points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
-                           pts_instance_mask, img_metas)
-            losses = self.bbox_head.loss(
-                bbox_preds, *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        losses = None  # waiting for fulfilling
         return losses
 
-    def _parse_losses(self, losses):
-        """Parse the raw outputs (losses) of the network.
-        Args:
-            losses (dict): Raw output of the network, which usually contain
-                losses and other necessary infomation.
-        Returns:
-            tuple[Tensor, dict]: (loss, log_vars), loss is the loss tensor \
-                which may be a weighted sum of all losses, log_vars contains \
-                all the variables to be sent to the logger.
-        """
-        log_vars = OrderedDict()
-        for loss_name, loss_value in losses.items():
-            if isinstance(loss_value, torch.Tensor):
-                log_vars[loss_name] = loss_value.float().mean()  # added .float by paul.ht
-            elif isinstance(loss_value, list):
-                log_vars[loss_name] = sum(_loss.mean() for _loss in loss_value)
-            else:
-                raise TypeError(
-                    f'{loss_name} is not a tensor or list of tensors')
-
-        loss = sum(_value for _key, _value in log_vars.items()
-                   if 'loss' in _key)
-
-        log_vars['loss'] = loss
-        for loss_name, loss_value in log_vars.items():
-            # reduce loss when distributed training
-            if dist.is_available() and dist.is_initialized():
-                loss_value = loss_value.data.clone()
-                dist.all_reduce(loss_value.div_(dist.get_world_size()))
-            log_vars[loss_name] = loss_value.item()
-
-        return loss, log_vars
-    
-    def train_step(self, data, optimizer):
-        """The iteration step during training.
-        This method defines an iteration step during training, except for the
-        back propagation and optimizer updating, which are done in an optimizer
-        hook. Note that in some complicated cases or models, the whole process
-        including back propagation and optimizer updating is also defined in
-        this method, such as GAN.
-        Args:
-            data (dict): The output of dataloader.
-            optimizer (:obj:`torch.optim.Optimizer` | dict): The optimizer of
-                runner is passed to ``train_step()``. This argument is unused
-                and reserved.
-        Returns:
-            dict: It should contain at least 3 keys: ``loss``, ``log_vars``, \
-                ``num_samples``.
-                - ``loss`` is a tensor for back propagation, which can be a \
-                weighted sum of multiple losses.
-                - ``log_vars`` contains all the variables to be sent to the
-                logger.
-                - ``num_samples`` indicates the batch size (when the model is \
-                DDP, it means the batch size on each GPU), which is used for \
-                averaging the logs.
-        """
-        losses = self(**data)
-        loss, log_vars = self._parse_losses(losses)
-
-        outputs = dict(
-            loss=loss, log_vars=log_vars, num_samples=len(data['img_metas']))
-
-        return outputs
 
     def simple_test(self, points, img_metas, imgs=None, rescale=False):
-        """Forward of testing.
-
-        Args:
-            points (list[torch.Tensor]): Points of each sample.
-            img_metas (list): Image metas.
-            rescale (bool): Whether to rescale results.
-
-        Returns:
-            list: Predicted 3d boxes.
-        """
+        points = points[0]
+        points_features = None  # graph(points), using above graph to extract features
         if self.head_type == 'PlainHead':
-            raise NotImplementedError()
+            outputs = self.predictor(points_features)
         elif self.head_type == 'VoteHead':
-            points_cat = torch.stack(points)
+            pass
+        bbox_results = None  # bbox_post_process outputs
+        return bbox_results
 
-            # TODO: wrapper the backbone function and substitute 'extract_feat' here
-            # x = self.extract_feat(points_cat)
-            # exit('waiting for fulfilling')
-            # bbox_preds = self.bbox_head(x, self.test_cfg.sample_mod)
-            bbox_preds = self.bbox_preds
 
-            bbox_list = self.bbox_head.get_bboxes(
-                points_cat, bbox_preds, img_metas, rescale=rescale)
-            bbox_results = [
-                bbox3d2result(bboxes, scores, labels)
-                for bboxes, scores, labels in bbox_list
-            ]
-            return bbox_results
-
-    def aug_test(self, points, img_metas, imgs=None, rescale=False):
-        """Test with augmentation."""
-        points_cat = [torch.stack(pts) for pts in points]
-        # TODO: wrapper the backbone function and substitute 'extract_feat' here
-        # feats = self.extract_feats(points_cat, img_metas)
-        # exit('waiting for fulfilling')
-        # bbox_preds = self.bbox_preds
-
-        # only support aug_test for one sample
-        aug_bboxes = []
-        # for x, pts_cat, img_meta in zip(feats, points_cat, img_metas):
-        #     bbox_preds = self.bbox_head(x, self.test_cfg.sample_mod)
-        for pts_cat, img_meta in zip(points_cat, img_metas):
-            # bbox_preds = self.bbox_head(x, self.test_cfg.sample_mod)
-            bbox_preds = self.bbox_preds
-            bbox_list = self.bbox_head.get_bboxes(
-                pts_cat, bbox_preds, img_meta, rescale=rescale)
-            bbox_list = [
-                dict(boxes_3d=bboxes, scores_3d=scores, labels_3d=labels)
-                for bboxes, scores, labels in bbox_list
-            ]
-            aug_bboxes.append(bbox_list[0])
-
-        # after merging, bboxes will be rescaled to the original image size
-        merged_bboxes = merge_aug_bboxes_3d(aug_bboxes, img_metas,
-                                            self.bbox_head.test_cfg)
-
-        return [merged_bboxes]
+    def aug_test(self, x):
+        pass

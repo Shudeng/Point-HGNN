@@ -21,7 +21,7 @@ model = dict(
         type='PartialBinBasedBBoxCoder',
         num_sizes=3,  # 18
         num_dir_bins=1,
-        with_rot=False,
+        with_rot=True,  # False
         # mean_sizes needs changes as dataset varies
         mean_sizes=[[0.76966727, 0.8116021, 0.92573744],
                     [1.876858, 1.8425595, 1.1931566],
@@ -95,3 +95,65 @@ model = dict(
 train_cfg = dict(pos_distance_thr=0.3, neg_distance_thr=0.6, sample_mod='vote')
 test_cfg = dict(
     sample_mod='seed', nms_thr=0.25, score_thr=0.05, per_class_proposal=True)
+
+# The schedule is usually used by models trained on KITTI dataset
+
+# The learning rate set in the cyclic schedule is the initial learning rate
+# rather than the max learning rate. Since the target_ratio is (10, 1e-4),
+# the learning rate will change from 0.0018 to 0.018, than go to 0.0018*1e-4
+lr = 0.0018
+# The optimizer follows the setting in SECOND.Pytorch, but here we use
+# the offcial AdamW optimizer implemented by PyTorch.
+optimizer = dict(type='AdamW', lr=lr, betas=(0.95, 0.99), weight_decay=0.01)
+optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
+# We use cyclic learning rate and momentum schedule following SECOND.Pytorch
+# https://github.com/traveller59/second.pytorch/blob/3aba19c9688274f75ebb5e576f65cfe54773c021/torchplus/train/learning_schedules_fastai.py#L69  # noqa
+# We implement them in mmcv, for more details, please refer to
+# https://github.com/open-mmlab/mmcv/blob/f48241a65aebfe07db122e9db320c31b685dc674/mmcv/runner/hooks/lr_updater.py#L327  # noqa
+# https://github.com/open-mmlab/mmcv/blob/f48241a65aebfe07db122e9db320c31b685dc674/mmcv/runner/hooks/momentum_updater.py#L130  # noqa
+lr_config = dict(
+    policy='cyclic',
+    target_ratio=(10, 1e-4),
+    cyclic_times=1,
+    step_ratio_up=0.4,
+)
+momentum_config = dict(
+    policy='cyclic',
+    target_ratio=(0.85 / 0.95, 1),
+    cyclic_times=1,
+    step_ratio_up=0.4,
+)
+# Although the total_epochs is 40, this schedule is usually used we
+# RepeatDataset with repeat ratio N, thus the actual total epoch
+# number could be Nx40
+total_epochs = 40
+
+# # optimizer
+# # This schedule is mainly used by models on indoor dataset,
+# # e.g., VoteNet on SUNRGBD and ScanNet
+# lr = 0.008  # max learning rate
+# optimizer = dict(type='AdamW', lr=lr, weight_decay=0.01)
+# optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
+# lr_config = dict(policy='step', warmup=None, step=[24, 32])
+# # runtime settings
+# total_epochs = 36
+
+
+checkpoint_config = dict(interval=1)
+# yapf:disable push
+# By default we use textlogger hook and tensorboard
+# For more loggers see
+# https://mmcv.readthedocs.io/en/latest/api.html#mmcv.runner.LoggerHook
+log_config = dict(
+    interval=30,  # 50
+    hooks=[
+        dict(type='TextLoggerHook'),
+        dict(type='TensorboardLoggerHook')
+    ])
+# yapf:enable
+dist_params = dict(backend='nccl')
+log_level = 'INFO'
+work_dir = None
+load_from = None
+resume_from = None
+workflow = [('train', 1)]

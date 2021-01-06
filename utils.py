@@ -12,8 +12,11 @@ def sample_indices(edges):
     """
     centers = edges[0, :]
     neighbors = edges[1, :]
+    unique_centers = torch.unique(centers)
+    # print('number of unique centers: ', unique_centers.size(0).item())
+
     idxs = []
-    for c in torch.unique(centers):
+    for c in unique_centers:
         # index of the first repeated element
         idx = torch.nonzero(torch.eq(centers, c), as_tuple=False)[0, 0].item()
         idxs.append(idx)

@@ -1,0 +1,17 @@
+2021-01-03 19:37:08,879 - mmdet - INFO - load 2207 Pedestrian database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 14357 Car database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 734 Cyclist database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 1297 Van database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 488 Truck database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 224 Tram database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 337 Misc database infos
+2021-01-03 19:37:08,880 - mmdet - INFO - load 56 Person_sitting database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - After filter database:
+2021-01-03 19:37:08,913 - mmdet - INFO - load 2089 Pedestrian database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 13509 Car database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 684 Cyclist database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 1297 Van database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 488 Truck database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 224 Tram database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 337 Misc database infos
+2021-01-03 19:37:08,913 - mmdet - INFO - load 56 Person_sitting database infos
