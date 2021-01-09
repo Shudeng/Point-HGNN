@@ -18,10 +18,10 @@ model = dict(
     bbox_head=dict(
         type='VoteHead',
         vote_module_cfg=dict(
-            in_channels=256,
+            in_channels=64, #256,
             vote_per_seed=1,
             gt_per_seed=3,
-            conv_channels=(256, 256),
+            conv_channels=(64, 256), #(256, 256),
             conv_cfg=dict(type='Conv1d'),
             norm_cfg=dict(type='BN1d'),
             norm_feats=True,
@@ -35,7 +35,8 @@ model = dict(
             num_point=256,
             radius=0.3,
             num_sample=16,
-            mlp_channels=[256, 128, 128, 128],
+#            mlp_channels=[256, 128, 128, 128],
+            mlp_channels=[64, 128, 128, 128],
             use_xyz=True,
             normalize_xyz=True),
         pred_layer_cfg=dict(

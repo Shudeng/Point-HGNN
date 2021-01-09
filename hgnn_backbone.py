@@ -34,7 +34,8 @@ def max_aggregation_fn(features, index, l):
     index = index.unsqueeze(-1).expand(-1, features.shape[-1])
     index = index.to(features.device)  # N x dim
     set_features = torch.zeros((l, features.shape[-1]), device=features.device).permute(1, 0).contiguous()  # len x dim
-    set_features, argmax = scatter_max(features.permute(1, 0), index.permute(1, 0), out=set_features)
+    output = scatter_max(features.permute(1, 0).contiguous(), index.permute(1, 0).contiguous(), out=set_features)
+    set_features, argmax= output
     set_features = set_features.permute(1, 0)
     return set_features
 
@@ -183,9 +184,9 @@ class HGNN(nn.Module):
 
     def forward(self,
                 points,
-                img_metas,
-                gt_bboxes_3d,
-                gt_labels_3d,
+                img_metas=None,
+                gt_bboxes_3d=None,
+                gt_labels_3d=None,
                 mode='train'):
         """args:
             points (list[torch.Tensor]): Points of each batch.
@@ -195,8 +196,10 @@ class HGNN(nn.Module):
 
         """
 
-        assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
+        #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
+        assert len(points)==1
         points = points[0][:100, :]
+        #points = points[0]
 
         ## step 1: construct graph
         coordinates, indices = self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
@@ -251,12 +254,14 @@ class HGNN(nn.Module):
 
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
-        fp_xyz = [coordinates[3].unsqueeze(0).cuda(), 
-                  coordinates[2].unsqueeze(0).cuda(), 
-                  coordinates[1].unsqueeze(0).cuda()]
-        fp_features = [p3.unsqueeze(0).permute(0, 2, 1).cuda(), 
-                       p2.unsqueeze(0).permute(0, 2, 1).cuda(), 
-                       p1.unsqueeze(0).permute(0, 2, 1).cuda()]
+
+
+        fp_xyz = [coordinates[3].unsqueeze(0), 
+                  coordinates[2].unsqueeze(0), 
+                  coordinates[1].unsqueeze(0)]
+        fp_features = [p3.unsqueeze(0).permute(0, 2, 1), 
+                       p2.unsqueeze(0).permute(0, 2, 1), 
+                       p1.unsqueeze(0).permute(0, 2, 1)]
         fp_indices = [indices_3.unsqueeze(0), 
                       indices_2.unsqueeze(0), 
                       indices_1.unsqueeze(0)]

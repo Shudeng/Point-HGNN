@@ -28,7 +28,7 @@ def voxelize(points: torch.Tensor, voxel_size):
     # if restore through multiply, the error may exist between current float value and original integral value.
     
     # return key_points.float().to(points.device)
-    return key_points.to(points.device), torch.tensor(indices)
+    return key_points.to(points.device), torch.tensor(indices).to(points.device)
 
 def inter_level_graph(points: torch.Tensor, key_points: torch.Tensor, radiu, max_num_neighbors=32):
     """

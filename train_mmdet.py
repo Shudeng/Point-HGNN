@@ -16,6 +16,7 @@ from mmdet3d.datasets import build_dataset
 from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet.apis import set_random_seed, train_detector
+from utils import build_hgnn_backbone
 
 
 def parse_args():
@@ -138,14 +139,7 @@ def main():
     model = build_detector(
         cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
 #    print("model", model)
-    print("model.backbone", model.backbone)
-    exit(0)
-
-
-
-
-
-
+    model.backbone = build_hgnn_backbone() 
 
     logger.info(f'Model:\n{model}')
     datasets = [build_dataset(cfg.data.train)]
