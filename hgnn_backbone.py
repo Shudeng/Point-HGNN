@@ -198,8 +198,8 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         assert len(points)==1
-        #points = points[0][:100, :]
-        points = points[0]
+        points = points[0][:100, :]
+        #points = points[0]
 
         ## step 1: construct graph
         coordinates, indices = self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
@@ -266,8 +266,8 @@ class HGNN(nn.Module):
                       indices_2.unsqueeze(0), 
                       indices_1.unsqueeze(0)]
         feat_dict = {'fp_xyz': fp_xyz,
-                    'fp_features': fp_features,
-                    'fp_indices': fp_indices,
+                'fp_features': fp_features,
+                'fp_indices': fp_indices,
         }
         return feat_dict
 
