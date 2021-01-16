@@ -54,6 +54,7 @@ def parse_args():
         default='none',
         help='job launcher')
     parser.add_argument('--local_rank', type=int, default=0)
+    parser.add_argument('--find_unused_parameters', type=bool, default=True)
     parser.add_argument(
         '--autoscale-lr',
         action='store_true',
@@ -69,6 +70,8 @@ def main():
     args = parse_args()
 
     cfg = Config.fromfile(args.config)
+    cfg.merge_from_dict({"find_unused_parameters": True})
+
     if args.options is not None:
         cfg.merge_from_dict(args.options)
 
@@ -156,6 +159,8 @@ def main():
             CLASSES=datasets[0].CLASSES)
     # add an attribute for visualization convenience
     model.CLASSES = datasets[0].CLASSES
+    find_unused_parameters = cfg.get('find_unused_parameters', False)
+
     train_detector(
         model,
         datasets,
