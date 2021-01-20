@@ -217,12 +217,12 @@ class HGNN(nn.Module):
                 # construct intra graph
                 intra_graphs["{}_{}".format(i, i)] = intra_level_graph(coordinates[i], self.intra_radius[i - 1])
 
-        for i, coordinate in enumerate(coordinates):
-            print("coordinate ", i, coordinate.shape)
-        for k, v in inter_graphs.items():
-            print(k, v.shape)
-        for k, v in intra_graphs.items():
-            print(k, v.shape)
+        # for i, coordinate in enumerate(coordinates):
+            # print("coordinate ", i, coordinate.shape)
+        # for k, v in inter_graphs.items():
+            # print(k, v.shape)
+        # for k, v in intra_graphs.items():
+            # print(k, v.shape)
         # print(inter_graphs["2_3"][:, :10])
 
         ## step 2: extract features (downsample and upsample with hierarchical connect) via graph
@@ -241,7 +241,7 @@ class HGNN(nn.Module):
         p1 = self.graph1_update(coordinates[1], decode_p1, intra_graphs["1_1"])
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, inter_graphs["1_0"])
 
-        print('size of extracted point features: ', p1.size())  # the first downsample graph
+        # print('size of extracted point features: ', p1.size())  # the first downsample graph
         #point_features = p1
         # (logits, box_encodings) = self.predictor(point_features)
         #results = self.predictor(point_features)
@@ -249,8 +249,8 @@ class HGNN(nn.Module):
 
         ## step 3: feed features to classify and regress box via head
         indices_1, indices_2, indices_3 = indices 
-        for idc in indices:
-            print(idc.size())
+        # for idc in indices:
+            # print(idc.size())
 
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.

@@ -58,9 +58,13 @@ def parse_args():
         '--autoscale-lr',
         action='store_true',
         help='automatically scale lr with the number of gpus')
+    parser.add_argument('--find_unused_parameters', type=bool, default=True)  # added by paul.ht 
+    parser.add_argument('--world-size', default=-1, type=int)
     args = parser.parse_args()
+    # print('local_rank:', os.environ['LOCAL_RANK'])
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
+    # print(os.environ['LOCAL_RANK'])
 
     return args
 
@@ -69,6 +73,8 @@ def main():
     args = parse_args()
 
     cfg = Config.fromfile(args.config)
+    cfg.merge_from_dict({"find_unused_parameters": True})
+
     if args.options is not None:
         cfg.merge_from_dict(args.options)
 
@@ -101,7 +107,8 @@ def main():
     else:
         distributed = True
         init_dist(args.launcher, **cfg.dist_params)
-
+    
+    # print(os.environ['LOCAL_RANK'])
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
     # init the logger before other steps

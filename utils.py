@@ -30,7 +30,7 @@ def build_hgnn_backbone(cfg=None):
     inter_radius = [0.3, 0.5, 0.7]
     intra_radius = [0.4, 0.6, 0.8]
 
-    max_num_neighbors = 256  # 32 is default, 256 is adopted in Point-GNN
+    max_num_neighbors = 32  # 32 is default, 256 is adopted in Point-GNN
     # (256 for training and all edges for inference)
 
     backbone = HGNN(downsample_voxel_sizes, inter_radius, intra_radius, max_num_neighbors)
