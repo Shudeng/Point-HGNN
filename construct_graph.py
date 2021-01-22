@@ -57,7 +57,7 @@ def intra_level_graph(key_points: torch.Tensor, radiu, loop: bool=False):
     """
     batch_x = torch.tensor([0]*len(key_points)).to(key_points.device)
     intra_graph = radius_graph(key_points, radiu, batch_x, loop)
-    return intra_graph
+    return intra_graph.to(key_points.device)
 
 
 if __name__ == "__main__":

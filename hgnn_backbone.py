@@ -139,10 +139,6 @@ class HGNN(nn.Module):
         """
 
         super(HGNN, self).__init__()
-        self.downsample_voxel_sizes = downsample_voxel_sizes
-        self.inter_radius = inter_radius
-        self.intra_radius = intra_radius
-        self.max_num_neighbors = max_num_neighbors
         #self.num_classes = num_classes
         #self.head_type = head_type
         #self.box_encoding_len = box_encoding_len
@@ -165,25 +161,12 @@ class HGNN(nn.Module):
         self.graph1_update = GraphBlock((64 + 3, 64), (64, 64), (64, 64))
         self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
 
-    def get_levels_coordinates(self, point_coordinates, voxel_sizes):
-        """
-        args:
-            point_coordinates: a tensor, N x 3
-            voxel_sizes: a list of list, its length is 3 defaut;
-                example: [[0.05,0.05,0.1], [0.07 , 0.07, 0.12], [0.09, 0.09, 0.14]]
-        return:
-            downsample_point_coordinates: a list of tensor, whose length is the same as voxel.
-
-        """
-        l1_point_coordinates, l1_point_indices = voxelize(point_coordinates, voxel_sizes[0])
-        l2_point_coordinates, l2_point_indices = voxelize(point_coordinates, voxel_sizes[1])
-        l3_point_coordinates, l3_point_indices = voxelize(point_coordinates, voxel_sizes[2])
-
-        return [l1_point_coordinates, l2_point_coordinates, l3_point_coordinates], \
-                [l1_point_indices, l2_point_indices, l3_point_indices]
-
     def forward(self,
                 points,
+                coordinates,
+                indices,
+                inter_graphs,
+                intra_graphs,
                 img_metas=None,
                 gt_bboxes_3d=None,
                 gt_labels_3d=None,
@@ -198,32 +181,10 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         assert len(points)==1
-        #points = points[0][:100, :]
-        points = points[0]
+        points = points[0][:100, :]
+        # points = points[0]
 
         ## step 1: construct graph
-        coordinates, indices = self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
-        coordinates = [points[:, :3]] + coordinates
-
-        # coordinates = [points[:, :3]] + self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
-        inter_graphs = {}
-        intra_graphs = {}
-        for i in range(len(coordinates)):
-            if i != len(coordinates) - 1:
-                inter_graphs["{}_{}".format(i, i + 1)], inter_graphs["{}_{}".format(i + 1, i)] = \
-                    inter_level_graph(coordinates[i], coordinates[i + 1], self.inter_radius[i],
-                                      max_num_neighbors=self.max_num_neighbors)
-            if i != 0:
-                # construct intra graph
-                intra_graphs["{}_{}".format(i, i)] = intra_level_graph(coordinates[i], self.intra_radius[i - 1])
-
-        # for i, coordinate in enumerate(coordinates):
-            # print("coordinate ", i, coordinate.shape)
-        # for k, v in inter_graphs.items():
-            # print(k, v.shape)
-        # for k, v in intra_graphs.items():
-            # print(k, v.shape)
-        # print(inter_graphs["2_3"][:, :10])
 
         ## step 2: extract features (downsample and upsample with hierarchical connect) via graph
 
@@ -254,7 +215,6 @@ class HGNN(nn.Module):
 
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
-
 
         fp_xyz = [coordinates[3].unsqueeze(0), 
                   coordinates[2].unsqueeze(0), 

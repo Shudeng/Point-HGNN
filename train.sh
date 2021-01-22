@@ -1,10 +1,10 @@
-GPU_ID=0,1
+GPU_ID=2,3
 
 ## single gpu
 #CUDA_VISIBLE_DEVICES=2 python train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py
 
 ## multi-gpu distribute train
-CUDA_VISIBLE_DEVICES=$GPU_ID python -m torch.distributed.launch --nproc_per_node=2 --master_port=29520 train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py --launcher pytorch
+CUDA_VISIBLE_DEVICES=$GPU_ID python -m torch.distributed.launch --nproc_per_node=2 --master_port=29555 train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py --launcher pytorch
 
 #python train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py
 
