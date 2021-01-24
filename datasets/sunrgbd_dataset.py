@@ -101,16 +101,19 @@ class SUNRGBDDataset(Custom3DDataset):
         # points = points[0]
         coordinates, indices = self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
         coordinates = [points[:, :3]] + coordinates
-        inter_graphs = {}
-        intra_graphs = {}
+        inter_graphs = []
+        intra_graphs = []
         for i in range(len(coordinates)):
             if i != len(coordinates) - 1:
-                inter_graphs["{}_{}".format(i, i + 1)], inter_graphs["{}_{}".format(i + 1, i)] = \
+                l2h, h2l = \
                     inter_level_graph(coordinates[i], coordinates[i + 1], self.inter_radius[i],
                                       max_num_neighbors=self.max_num_neighbors)
+                inter_graphs.append(l2h)
+                inter_graphs.append(h2l)
             if i != 0:
                 # construct intra graph
-                intra_graphs["{}_{}".format(i, i)] = intra_level_graph(coordinates[i], self.intra_radius[i - 1])
+                i2i = intra_level_graph(coordinates[i], self.intra_radius[i - 1])
+                intra_graphs.append(i2i)
         return coordinates, indices, inter_graphs, intra_graphs
 
     def __getitem__(self, idx):
@@ -138,10 +141,7 @@ class SUNRGBDDataset(Custom3DDataset):
             # data['inter_graphs'] = inter_graphs
             # data['intra_graphs'] = intra_graphs
             # print('before:', data)
-            data['coordinates'] = DataContainer(coordinates)
-            data['indices'] = DataContainer(indices)
-            data['inter_graphs'] = DataContainer(inter_graphs)
-            data['intra_graphs'] = DataContainer(intra_graphs)
+            data['points'] = DataContainer([data['points'].data, coordinates, indices, inter_graphs, intra_graphs])
             # print('raw data:', data)
             # print('after:', data)
             return data

@@ -162,11 +162,7 @@ class HGNN(nn.Module):
         self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
 
     def forward(self,
-                points,
-                coordinates,
-                indices,
-                inter_graphs,
-                intra_graphs,
+                data,
                 img_metas=None,
                 gt_bboxes_3d=None,
                 gt_labels_3d=None,
@@ -178,28 +174,31 @@ class HGNN(nn.Module):
             gt_labels_3d (list[torch.Tensor]): gt class labels of each batch.
 
         """
-
+        coordinates = data[0][1]
+        indices = data[0][2]
+        inter_graphs = data[0][3]
+        intra_graphs = data[0][4]
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
-        assert len(points)==1
-        points = points[0][:100, :]
-        # points = points[0]
+        # assert len(points)==1
+        points = data[0][0][:100, :]
+        #points = points[0]
 
         ## step 1: construct graph
 
         ## step 2: extract features (downsample and upsample with hierarchical connect) via graph
 
         p1 = self.downsample1(last_coors=coordinates[0], last_features=points,
-                              current_coors=coordinates[1], edge=inter_graphs["0_1"])
-        encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=intra_graphs["1_1"])
-        p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], inter_graphs["1_2"])
-        encode_p2 = self.graph2(coordinates[2], p2, intra_graphs["2_2"])
-        p3 = self.downsample3(coordinates[2], encode_p2, coordinates[3], inter_graphs["2_3"])
-        p3 = self.graph3(coordinates[3], p3, intra_graphs["3_3"])
+                              current_coors=coordinates[1], edge=inter_graphs[0])
+        encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=intra_graphs[0])
+        p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], inter_graphs[2])
+        encode_p2 = self.graph2(coordinates[2], p2, intra_graphs[1])
+        p3 = self.downsample3(coordinates[2], encode_p2, coordinates[3], inter_graphs[4])
+        p3 = self.graph3(coordinates[3], p3, intra_graphs[2])
         decode_p2 = self.upsample1(current_coors=coordinates[3], current_features=p3,
-                                   last_coors=coordinates[2], last_features=encode_p2, edge=inter_graphs["3_2"])
-        p2 = self.graph2_update(coordinates[2], decode_p2, intra_graphs["2_2"])
-        decode_p1 = self.upsample2(coordinates[2], p2, coordinates[1], encode_p1, inter_graphs["2_1"])
-        p1 = self.graph1_update(coordinates[1], decode_p1, intra_graphs["1_1"])
+                                   last_coors=coordinates[2], last_features=encode_p2, edge=inter_graphs[5])
+        p2 = self.graph2_update(coordinates[2], decode_p2, intra_graphs[1])
+        decode_p1 = self.upsample2(coordinates[2], p2, coordinates[1], encode_p1, inter_graphs[3])
+        p1 = self.graph1_update(coordinates[1], decode_p1, intra_graphs[0])
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, inter_graphs["1_0"])
 
         # print('size of extracted point features: ', p1.size())  # the first downsample graph
@@ -211,10 +210,11 @@ class HGNN(nn.Module):
         ## step 3: feed features to classify and regress box via head
         indices_1, indices_2, indices_3 = indices 
         # for idc in indices:
-            # print(idc.size())
+        #     print(idc.size())
 
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
+
 
         fp_xyz = [coordinates[3].unsqueeze(0), 
                   coordinates[2].unsqueeze(0), 
@@ -226,8 +226,8 @@ class HGNN(nn.Module):
                       indices_2.unsqueeze(0), 
                       indices_1.unsqueeze(0)]
         feat_dict = {'fp_xyz': fp_xyz,
-                    'fp_features': fp_features,
-                    'fp_indices': fp_indices,
+                'fp_features': fp_features,
+                'fp_indices': fp_indices,
         }
         return feat_dict
 

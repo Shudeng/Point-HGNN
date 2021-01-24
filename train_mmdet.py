@@ -12,8 +12,10 @@ from mmcv.runner import init_dist
 from os import path as osp
 
 from mmdet3d import __version__
+
 # from mmdet3d.datasets import build_dataset
 from datasets.builder import build_dataset
+
 from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet.apis import set_random_seed, train_detector
@@ -59,7 +61,9 @@ def parse_args():
         '--autoscale-lr',
         action='store_true',
         help='automatically scale lr with the number of gpus')
+
     parser.add_argument('--find_unused_parameters', type=bool, default=True)  # added by paul.ht 
+    
     parser.add_argument('--world-size', default=-1, type=int)
     args = parser.parse_args()
     # print('local_rank:', os.environ['LOCAL_RANK'])
