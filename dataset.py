@@ -16,13 +16,18 @@ class MyDataset(Dataset):
 
 
         self.max_num_neighbors = 32
+        self.downsample_voxel_sizes = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]
+        self.inter_radius = [0.1, 0.2, 0.3]
+        self.intra_radius = [0.15, 0.25, 0.35]
+        """
         self.downsample_voxel_sizes = [[0.5, 0.5, 0.5], [0.8, 0.8, 0.8], [1.1, 1.1, 1.1]]
         self.inter_radius = [1.0, 1.5, 2.0]
         self.intra_radius = [1.5, 2.0, 2.5]
+        """
 
     def voxelize(self, points, voxel_size):
-        voxel_size = torch.tensor(voxel_size).to(points.device)
-        rescale_points = points / voxel_size
+        voxel_size = torch.tensor(voxel_size)
+        rescale_points = points / voxel_size.to(points.device)
         rescale_points = rescale_points.long()
 
         keypoints = set()
@@ -33,7 +38,7 @@ class MyDataset(Dataset):
                 keypoints.add(point)
                 indices += [i]
 
-        return torch.tensor(list(keypoints)), torch.tensor(indices).long()
+        return torch.tensor(list(keypoints))*voxel_size, torch.tensor(indices).long()
 
     def inter_level_graph(self, points: torch.Tensor, key_points: torch.Tensor, radiu, max_num_neighbors=32):
         """
@@ -89,13 +94,26 @@ class MyDataset(Dataset):
 
         for i in range(len(coordinates)):
             if i != len(coordinates) - 1:
+
+                assert len(coordinates[i]) != 1
+                assert len(coordinates[i+1]) != 1
+
                 graph = self.inter_level_graph(coordinates[i], coordinates[i + 1], self.inter_radius[i],
                         max_num_neighbors=self.max_num_neighbors)
+
+                assert graph.shape[1]!=0
+                assert graph[0,:].max() < len(coordinates[i+1])
+                assert graph[1,:].max() < len(coordinates[i])
+
                 res["graph_{}_{}".format(i, i+1)] = DC(graph)
                 res["graph_{}_{}".format(i+1, i)] = DC(graph[[1,0], :])
 
             if i!=0:
+                #print("len(coordinates[i])", len(coordinates[i]))
+
                 graph = self.intra_level_graph(coordinates[i], self.intra_radius[i - 1])
+                assert graph[0, :].max() < len(coordinates[i])
+                assert graph[1, :].max() < len(coordinates[i])
                 res["graph_{}_{}".format(i, i)] = DC(graph)
 
         return res

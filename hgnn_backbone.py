@@ -3,7 +3,7 @@ from torch import nn
 #from mmdet3d.models.detectors.single_stage import SingleStage3DDetector
 #from mmdet3d.models.detectors import Base3DDetector
 from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
-from torch_scatter import scatter_max
+from torch_scatter import scatter_max, scatter
 from collections import OrderedDict
 import torch.distributed as dist
 
@@ -31,12 +31,13 @@ def max_aggregation_fn(features, index, l):
     return:
         set_features: l x dim
     """
-    index = index.unsqueeze(-1).expand(-1, features.shape[-1])
-    index = index.to(features.device)  # N x dim
-    set_features = torch.zeros((l, features.shape[-1]), device=features.device).permute(1, 0).contiguous()  # len x dim
-    output = scatter_max(features.permute(1, 0).contiguous(), index.permute(1, 0).contiguous(), out=set_features)
-    set_features, argmax= output
-    set_features = set_features.permute(1, 0)
+
+    try:
+        output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l)
+    except:
+        exit(0)
+    #set_features, argmax= output
+    set_features = output
     return set_features
 
 
@@ -78,19 +79,12 @@ class BasicBlock(nn.Module):
 
         current_indices = edge[0, :].long()
         last_indices = edge[1, :].long()
-        print("current_indices", current_indices)
-        print("current_coors", current_coors)
-
-        print("current_indices", current_indices.shape)
-        print("current_coors", current_coors.shape)
-        print("last_features.shape", last_features.shape)
-
 
         center_coors = current_coors[current_indices]  # E x 3
         neighbor_coors = last_coors[last_indices]  # E x 3
+
         neighbor_features = last_features[last_indices]  # E x f
         neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
-        print("neighbor_features", neighbor_features.shape)
 
         neighbor_features = self.in_linear(neighbor_features)
 
@@ -232,6 +226,8 @@ class HGNN(nn.Module):
         p1 = self.downsample1(last_coors=coordinates[0], last_features=points,
                               current_coors=coordinates[1], edge=graphs["graph_0_1"])
 
+        edge = graphs["graph_0_1"][0]
+
         encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=graphs["graph_1_1"])
         p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], graphs["graph_1_2"])
         encode_p2 = self.graph2(coordinates[2], p2, graphs["graph_2_2"])
@@ -244,18 +240,7 @@ class HGNN(nn.Module):
         p1 = self.graph1_update(coordinates[1], decode_p1, graphs["graph_1_1"])
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, graphs["1_0"])
 
-        print('size of extracted point features: ', p1.size())  # the first downsample graph
-        print('size of extracted point features: ', p1.shape)
-        #point_features = p1
-        # (logits, box_encodings) = self.predictor(point_features)
-        #results = self.predictor(point_features)
-        #print("results.shape", results[0].shape)
-
-        ## step 3: feed features to classify and regress box via head
         indices_1, indices_2, indices_3 = indices 
-        for idc in indices:
-            print(idc.size())
-
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
 
@@ -264,22 +249,14 @@ class HGNN(nn.Module):
                   coordinates[2].unsqueeze(0), 
                   coordinates[1].unsqueeze(0)]
 
-        for points in fp_xyz:
-            print("points.shape", points.shape)
-
         fp_features = [p3.unsqueeze(0).permute(0, 2, 1), 
                        p2.unsqueeze(0).permute(0, 2, 1), 
                        p1.unsqueeze(0).permute(0, 2, 1)]
 
-        for features in fp_features:
-            print("features.shape", features.shape)
 
         fp_indices = [indices_3.unsqueeze(0), 
                       indices_2.unsqueeze(0), 
                       indices_1.unsqueeze(0)]
-
-        for indices in fp_indices:
-            print("indics.shape", indices.shape)
 
         feat_dict = {'fp_xyz': fp_xyz,
                 'fp_features': fp_features,
