@@ -11,6 +11,10 @@ from torch.utils.data import Dataset
 class MyDataset(Dataset):
     def __init__(self, dataset_cfg):
         self.dataset = build_dataset(dataset_cfg)
+        self.CLASSES = self.dataset.CLASSES
+        self.flag = self.dataset.flag
+
+
         self.max_num_neighbors = 32
         self.downsample_voxel_sizes = [[0.5, 0.5, 0.5], [0.8, 0.8, 0.8], [1.1, 1.1, 1.1]]
         self.inter_radius = [1.0, 1.5, 2.0]
@@ -29,7 +33,7 @@ class MyDataset(Dataset):
                 keypoints.add(point)
                 indices += [i]
 
-        return torch.tensor(list(keypoints)), torch.tensor(indices)
+        return torch.tensor(list(keypoints)), torch.tensor(indices).long()
 
     def inter_level_graph(self, points: torch.Tensor, key_points: torch.Tensor, radiu, max_num_neighbors=32):
         """
@@ -45,8 +49,10 @@ class MyDataset(Dataset):
 
         downsample_graph = radius(points, key_points, radiu, batch_x, batch_y, max_num_neighbors=max_num_neighbors)
         # upsample_graph = radius(key_points, points, radiu, batch_y, batch_x, max_num_neighbors=max_num_neighbors)
-        upsample_graph = downsample_graph[[1, 0], :]
-        return downsample_graph.to(points.device), upsample_graph.to(points.device)
+        #upsample_graph = downsample_graph[[1, 0], :]
+        #return downsample_graph.to(points.device), upsample_graph.to(points.device)
+
+        return downsample_graph.to(points.device)
 
     def intra_level_graph(self, key_points: torch.Tensor, radiu, loop: bool=False):
         """
@@ -69,14 +75,16 @@ class MyDataset(Dataset):
         res = self.dataset.__getitem__(idx)
         points = res['points']
         points = points.data.cuda()
-        coordinates = [points.data[:,:3]]
+        coordinates = [points[:, :3]]
+        res["keypoints_{}".format(0)] = DC(points.data[:,:3])
+
 
         ## voxelize
         for level in range(3):
             keypoints, indices = self.voxelize(points.data[:,:3], self.downsample_voxel_sizes[level])
             keypoints, indices = keypoints.float().cuda(), indices.cuda()
-            res["keypoints_{}".format(level)] = DC(keypoints)
-            res["indices_{}".format(level)] = DC(indices)
+            res["keypoints_{}".format(level+1)] = DC(keypoints)
+            res["indices_{}".format(level+1)] = DC(indices)
             coordinates += [keypoints]
 
         for i in range(len(coordinates)):
@@ -84,6 +92,7 @@ class MyDataset(Dataset):
                 graph = self.inter_level_graph(coordinates[i], coordinates[i + 1], self.inter_radius[i],
                         max_num_neighbors=self.max_num_neighbors)
                 res["graph_{}_{}".format(i, i+1)] = DC(graph)
+                res["graph_{}_{}".format(i+1, i)] = DC(graph[[1,0], :])
 
             if i!=0:
                 graph = self.intra_level_graph(coordinates[i], self.intra_radius[i - 1])

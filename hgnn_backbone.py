@@ -67,13 +67,31 @@ class BasicBlock(nn.Module):
         return:
             current_features, M x outplanes
         """
-        current_indices = edge[0, :]
-        last_indices = edge[1, :]
+        if type(edge) is list:
+            edge = edge[0]
+
+        if type(current_coors) is list:
+            current_coors = current_coors[0]
+
+        if type(last_coors) is list:
+            last_coors = last_coors[0]
+
+        current_indices = edge[0, :].long()
+        last_indices = edge[1, :].long()
+        print("current_indices", current_indices)
+        print("current_coors", current_coors)
+
+        print("current_indices", current_indices.shape)
+        print("current_coors", current_coors.shape)
+        print("last_features.shape", last_features.shape)
+
 
         center_coors = current_coors[current_indices]  # E x 3
         neighbor_coors = last_coors[last_indices]  # E x 3
         neighbor_features = last_features[last_indices]  # E x f
         neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
+        print("neighbor_features", neighbor_features.shape)
+
         neighbor_features = self.in_linear(neighbor_features)
 
         current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
@@ -134,8 +152,8 @@ class HGNN(nn.Module):
         args:
             downsample_voxel_sizes: a list of list, its length is 3 defaut;
             example: [[0.05,0.05,0.1], [0.07 , 0.07, 0.12], [0.09, 0.09, 0.14]]
-            inter_radius: a list, the radius for constructing inter_graphs.
-            intra_radius: a list, the radius for constructing intra_graphs
+            inter_radius: a list, the radius for constructing graphs.
+            intra_radius: a list, the radius for constructing graphs
         """
 
         super(HGNN, self).__init__()
@@ -187,7 +205,8 @@ class HGNN(nn.Module):
                 img_metas=None,
                 gt_bboxes_3d=None,
                 gt_labels_3d=None,
-                mode='train'):
+                mode='train', 
+                **kwargs):
         """args:
             points (list[torch.Tensor]): Points of each batch.
             img_metas (list): Image metas.
@@ -198,50 +217,35 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         assert len(points)==1
-        points = points[0][:100, :]
-        #points = points[0]
+        #points = points[0][:100, :]
+        points = points[0]
 
         ## step 1: construct graph
-        coordinates, indices = self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
-        coordinates = [points[:, :3]] + coordinates
+        # all item in kwargs is a list of tensor, and the lengthes of these lists are batch size.
+        coordinates = [kwargs["keypoints_{}".format(level)][0] for level in range(0,4)]
+        indices = [kwargs["indices_{}".format(level)][0] for level in range(1,4)]
+        graphs = kwargs
 
-        # coordinates = [points[:, :3]] + self.get_levels_coordinates(points[:, :3], self.downsample_voxel_sizes)
-        inter_graphs = {}
-        intra_graphs = {}
-        for i in range(len(coordinates)):
-            if i != len(coordinates) - 1:
-                inter_graphs["{}_{}".format(i, i + 1)], inter_graphs["{}_{}".format(i + 1, i)] = \
-                    inter_level_graph(coordinates[i], coordinates[i + 1], self.inter_radius[i],
-                                      max_num_neighbors=self.max_num_neighbors)
-            if i != 0:
-                # construct intra graph
-                intra_graphs["{}_{}".format(i, i)] = intra_level_graph(coordinates[i], self.intra_radius[i - 1])
-
-        for i, coordinate in enumerate(coordinates):
-            print("coordinate ", i, coordinate.shape)
-        for k, v in inter_graphs.items():
-            print(k, v.shape)
-        for k, v in intra_graphs.items():
-            print(k, v.shape)
-        # print(inter_graphs["2_3"][:, :10])
 
         ## step 2: extract features (downsample and upsample with hierarchical connect) via graph
 
         p1 = self.downsample1(last_coors=coordinates[0], last_features=points,
-                              current_coors=coordinates[1], edge=inter_graphs["0_1"])
-        encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=intra_graphs["1_1"])
-        p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], inter_graphs["1_2"])
-        encode_p2 = self.graph2(coordinates[2], p2, intra_graphs["2_2"])
-        p3 = self.downsample3(coordinates[2], encode_p2, coordinates[3], inter_graphs["2_3"])
-        p3 = self.graph3(coordinates[3], p3, intra_graphs["3_3"])
+                              current_coors=coordinates[1], edge=graphs["graph_0_1"])
+
+        encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=graphs["graph_1_1"])
+        p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], graphs["graph_1_2"])
+        encode_p2 = self.graph2(coordinates[2], p2, graphs["graph_2_2"])
+        p3 = self.downsample3(coordinates[2], encode_p2, coordinates[3], graphs["graph_2_3"])
+        p3 = self.graph3(coordinates[3], p3, graphs["graph_3_3"])
         decode_p2 = self.upsample1(current_coors=coordinates[3], current_features=p3,
-                                   last_coors=coordinates[2], last_features=encode_p2, edge=inter_graphs["3_2"])
-        p2 = self.graph2_update(coordinates[2], decode_p2, intra_graphs["2_2"])
-        decode_p1 = self.upsample2(coordinates[2], p2, coordinates[1], encode_p1, inter_graphs["2_1"])
-        p1 = self.graph1_update(coordinates[1], decode_p1, intra_graphs["1_1"])
-        # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, inter_graphs["1_0"])
+                                   last_coors=coordinates[2], last_features=encode_p2, edge=graphs["graph_3_2"])
+        p2 = self.graph2_update(coordinates[2], decode_p2, graphs["graph_2_2"])
+        decode_p1 = self.upsample2(coordinates[2], p2, coordinates[1], encode_p1, graphs["graph_2_1"])
+        p1 = self.graph1_update(coordinates[1], decode_p1, graphs["graph_1_1"])
+        # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, graphs["1_0"])
 
         print('size of extracted point features: ', p1.size())  # the first downsample graph
+        print('size of extracted point features: ', p1.shape)
         #point_features = p1
         # (logits, box_encodings) = self.predictor(point_features)
         #results = self.predictor(point_features)
@@ -259,12 +263,24 @@ class HGNN(nn.Module):
         fp_xyz = [coordinates[3].unsqueeze(0), 
                   coordinates[2].unsqueeze(0), 
                   coordinates[1].unsqueeze(0)]
+
+        for points in fp_xyz:
+            print("points.shape", points.shape)
+
         fp_features = [p3.unsqueeze(0).permute(0, 2, 1), 
                        p2.unsqueeze(0).permute(0, 2, 1), 
                        p1.unsqueeze(0).permute(0, 2, 1)]
+
+        for features in fp_features:
+            print("features.shape", features.shape)
+
         fp_indices = [indices_3.unsqueeze(0), 
                       indices_2.unsqueeze(0), 
                       indices_1.unsqueeze(0)]
+
+        for indices in fp_indices:
+            print("indics.shape", indices.shape)
+
         feat_dict = {'fp_xyz': fp_xyz,
                 'fp_features': fp_features,
                 'fp_indices': fp_indices,
