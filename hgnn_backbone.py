@@ -40,7 +40,7 @@ def max_aggregation_fn(features, index, l):
     set_features = output
     return set_features
 
-def small_to_large(self, features_list, index_list, length_list):
+def small_to_large(features_list, index_list, length_list):
     # concat several small graphs to a large graph
     new_index_list = [index_list[0]]
     for i in range(1, len(index_list)): new_index_list += [index_list[i]+length_list[i-1]]
@@ -49,15 +49,15 @@ def small_to_large(self, features_list, index_list, length_list):
 
     return features_cat, index_cat
 
-def large_to_small(self, large_graph_features, length_list):
+def large_to_small(large_graph_features, length_list):
     output = large_graph_features
 
     new_graphs = []
     start = 0
     for i in range(len(length_list)):
-    ¦   end = start + length_list[i]
-    ¦   new_graphs += [output[start:end]]
-    ¦   start = end
+        end = start + length_list[i]
+        new_graphs += [output[start:end]]
+        start = end
     return new_graphs
 
 
@@ -102,12 +102,20 @@ class BasicBlock(nn.Module):
 
             features_list += [neighbor_features]
             indices_list += [current_indices]
-            length_list += [len(current_coors)]
-            total_len += len(current_coors)
+            length_list += [len(current_coors[i])]
+            total_len += len(current_coors[i])
 
-        features, indices = self.small_to_large(features_list, indices_list, length_list)
+        features, indices = small_to_large(features_list, indices_list, length_list)
         features = self.in_linear(features)
-        current_features = max_aggregation_fn(neighbor_features, indices, total_len
+        """
+        print("features.shape", features.shape)
+        print("indices", indices.shape, indices.max(), indices.min())
+        print("total_len", total_len)
+        print("length_list", length_list)
+        """
+
+        current_features = max_aggregation_fn(features, indices, total_len)
+
         return self.out_linear(current_features), length_list
 
 
@@ -118,7 +126,7 @@ class DownsampleBlock(nn.Module):
 
     def forward(self, last_coors, last_features, current_coors, edge):
         features, length_list = self.basic_block(last_coors, last_features, current_coors, edge)
-        features_list = self.large_to_small(features, length_list)
+        features_list = large_to_small(features, length_list)
 
         return features_list
 
@@ -142,7 +150,7 @@ class GraphBlock(nn.Module):
         features = torch.cat(features, dim=0)
         assert update_features.shape[1] == features.shape[1]
         update_features = self.after_cat_linear(features + update_features)
-        features_list = self.large_to_small(update_features, length_list)
+        features_list = large_to_small(update_features, length_list)
 
         return features_list
 
@@ -162,7 +170,7 @@ class UpsampleBlock(nn.Module):
         last_features = torch.cat(last_features, dim=0)
         before_cat_features = self.before_cat_linear(last_features)
         after_cat_features = before_cat_features + update_features
-        features_list = self.large_to_small(after_cat_features, length_list)
+        features_list = large_to_small(after_cat_features, length_list)
         return features_list
 
 class HGNN(nn.Module):
@@ -237,8 +245,8 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         assert len(points)==1
-        #points = points[0][:100, :]
-        points = points[0]
+
+        coordinates = [kwargs["keypoints_{}".format(level)] for level in range(4)]
         indices = [kwargs["indices_{}".format(level)] for level in range(1,4)]
         graphs = kwargs
 

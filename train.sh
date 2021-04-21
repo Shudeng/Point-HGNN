@@ -3,8 +3,8 @@
 
 export PYTHONPATH=/Point-HGNN/mmdetection3d:$PYTHONPATH
 ## multi-gpu distribute train
-python -m torch.distributed.launch --nproc_per_node=2 --master_port=29501 train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py --launcher pytorch
-#CUDA_LAUNCH_BLOCKING=1 python train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py
+#python -m torch.distributed.launch --nproc_per_node=2 --master_port=29501 train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py --launcher pytorch
+CUDA_LAUNCH_BLOCKING=1 python train_mmdet.py configs/votenet/votenet_16x8_sunrgbd-3d-10class.py
 
 #python -m torch.distributed.launch --nproc_per_node=1 --master_port=29500 train.py configs/_base_/datasets/kitti-3d-3class.py \
 #    --head_type PlainHead
