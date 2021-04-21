@@ -33,12 +33,66 @@ def max_aggregation_fn(features, index, l):
     """
 
     try:
-        output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l)
+        output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l, reduce="mean")
     except:
         exit(0)
     #set_features, argmax= output
     set_features = output
     return set_features
+
+def small_to_large(self, features_list, index_list, length_list):
+    # concat several small graphs to a large graph
+    new_index_list = [index_list[0]]
+    for i in range(1, len(index_list)): new_index_list += [index_list[i]+length_list[i-1]]
+    features_cat = torch.cat(features_list, dim=0)
+    index_cat = torch.cat(index_list, dim=0)
+
+    return features_cat, index_cat
+
+def large_to_small(self, large_graph_features, length_list):
+    output = large_graph_features
+    l = 0
+    for length in length_list: l+=length
+
+    output = scatter(features_cat, index_cat, dim=0, dim_size=l, reduce="mean")
+    new_graphs = []
+    start = 0
+    for i in range(len(length_list)):
+    ¦   end = start + length_list[i]
+    ¦   new_graphs += [output[start:end]]
+    ¦   start = end
+    return new_graphs
+
+def batch_max_aggregation_fn(features_list, index_list, length_list):
+    """
+    args:
+        assert len(features_list)==len(index_list)==len(length_list)
+        assert len(features_list[i]) == len(index_list[i]) for i in range(len(index_list))
+
+        features_list is a list of features of several graphs, 
+        index_list is a list of index of serversl graphs
+        length_list is a list of length of new graphs, whose element is a integer
+    return:
+        new graphs, a list of features of new graphs
+    """
+
+    # concat several small graphs to a large graph
+    new_index_list = [index_list[0]]
+    for i in range(1, len(index_list)): new_index_list += [index_list[i]+length_list[i-1]]
+    features_cat = torch.cat(features_list, dim=0)
+    index_cat = torch.cat(index_list, dim=0)
+
+    l = 0
+    for length in length_list: l+=length
+
+    output = scatter(features_cat, index_cat, dim=0, dim_size=l, reduce="mean")
+    new_graphs = []
+    start = 0
+    for i in range(len(length_list)):
+        end = start + length_list[i]
+        new_graphs += [output[start:end]]
+        start = end
+    return new_graphs
 
 
 class BasicBlock(nn.Module):
@@ -60,36 +114,34 @@ class BasicBlock(nn.Module):
     def forward(self, last_coors, last_features, current_coors, edge):
         """
         args:
-            last_coors: coordinates of last level, N x 3
-            last_features: features of last level, N x f
-            current_coors: coordinates of current level, M x 3
-            edge: edge, 2 x E, [current_index, last_index]
+            last_coors: list of corrdinates of last level
+            last_features: list of features of last level
+            current_coors: list of coordinates of current level
+            edge: list of edges
 
         return:
-            current_features, M x outplanes
+            update_features, a tensor
+            length_list: length of graph of current level
         """
-        if type(edge) is list:
-            edge = edge[0]
+        features_list, indices_list, length_list = [], [], []
+        total_len = 0
+        for i in range(len(edge)):
+            current_indices = edge[i][0, :].long()
+            last_indices = edge[i][1, :].long()
 
-        if type(current_coors) is list:
-            current_coors = current_coors[0]
+            center_coors = current_coors[i][current_indices]  # E x 3
+            neighbor_coors = last_coors[i][last_indices]  # E x 3
+            neighbor_features = last_features[i][last_indices]  # E x f
+            neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
 
-        if type(last_coors) is list:
-            last_coors = last_coors[0]
+            features_list += [neighbor_features]
+            indices_list += [current_indices]
+            length_list += [len(current_coors)]
 
-        current_indices = edge[0, :].long()
-        last_indices = edge[1, :].long()
-
-        center_coors = current_coors[current_indices]  # E x 3
-        neighbor_coors = last_coors[last_indices]  # E x 3
-
-        neighbor_features = last_features[last_indices]  # E x f
-        neighbor_features = torch.cat([neighbor_features, neighbor_coors - center_coors], dim=1)  # E x (3+f)
-
-        neighbor_features = self.in_linear(neighbor_features)
-
+        features, indices = self.small_to_large(features_list, indices_list, length_list)
+        features = self.in_linear(features)
         current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
-        return self.out_linear(current_features)
+        return self.out_linear(current_features), length_list
 
 
 class DownsampleBlock(nn.Module):
@@ -98,7 +150,10 @@ class DownsampleBlock(nn.Module):
         self.basic_block = BasicBlock(in_inter_channels, out_inter_channels)
 
     def forward(self, last_coors, last_features, current_coors, edge):
-        return self.basic_block(last_coors, last_features, current_coors, edge)
+        features, length_list = self.basic_block(last_coors, last_features, current_coors, edge)
+        features_list = self.large_to_small(features, length_list)
+
+        return features_list
 
 
 class GraphBlock(nn.Module):
@@ -116,10 +171,13 @@ class GraphBlock(nn.Module):
 
         return: updated features
         """
-        update_features = self.basic_block(coors, features, coors, edge)  # N x f, can be changed to attention mode
+        update_features, length_list = self.basic_block(coors, features, coors, edge)  # N x f, can be changed to attention mode
+        features = torch.cat(features, dim=0)
         assert update_features.shape[1] == features.shape[1]
+        update_features = self.after_cat_linear(features + update_features)
+        features_list = self.large_to_small(update_features, length_list)
 
-        return self.after_cat_linear(features + update_features)
+        return features_list
 
 
 class UpsampleBlock(nn.Module):
@@ -131,13 +189,14 @@ class UpsampleBlock(nn.Module):
 
     def forward(self, current_coors, current_features, last_coors, last_features, edge):
         # last corresponds to the upsampled point?
-        update_features = self.basic_block(current_coors, current_features, last_coors,
+        update_features, length_list = self.basic_block(current_coors, current_features, last_coors,
                                            edge)  # can be changed to attention mode
 
+        last_features = torch.cat(last_features, dim=0)
         before_cat_features = self.before_cat_linear(last_features)
         after_cat_features = before_cat_features + update_features
-        return self.after_cat_linear(after_cat_features)
-
+        features_list = self.large_to_small(after_cat_features, length_list)
+        return features_list
 
 class HGNN(nn.Module):
     def __init__(self, downsample_voxel_sizes, inter_radius, intra_radius,
@@ -213,11 +272,7 @@ class HGNN(nn.Module):
         assert len(points)==1
         #points = points[0][:100, :]
         points = points[0]
-
-        ## step 1: construct graph
-        # all item in kwargs is a list of tensor, and the lengthes of these lists are batch size.
-        coordinates = [kwargs["keypoints_{}".format(level)][0] for level in range(0,4)]
-        indices = [kwargs["indices_{}".format(level)][0] for level in range(1,4)]
+        indices = [kwargs["indices_{}".format(level)] for level in range(1,4)]
         graphs = kwargs
 
 
