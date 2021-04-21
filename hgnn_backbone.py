@@ -51,47 +51,13 @@ def small_to_large(self, features_list, index_list, length_list):
 
 def large_to_small(self, large_graph_features, length_list):
     output = large_graph_features
-    l = 0
-    for length in length_list: l+=length
 
-    output = scatter(features_cat, index_cat, dim=0, dim_size=l, reduce="mean")
     new_graphs = []
     start = 0
     for i in range(len(length_list)):
     ¦   end = start + length_list[i]
     ¦   new_graphs += [output[start:end]]
     ¦   start = end
-    return new_graphs
-
-def batch_max_aggregation_fn(features_list, index_list, length_list):
-    """
-    args:
-        assert len(features_list)==len(index_list)==len(length_list)
-        assert len(features_list[i]) == len(index_list[i]) for i in range(len(index_list))
-
-        features_list is a list of features of several graphs, 
-        index_list is a list of index of serversl graphs
-        length_list is a list of length of new graphs, whose element is a integer
-    return:
-        new graphs, a list of features of new graphs
-    """
-
-    # concat several small graphs to a large graph
-    new_index_list = [index_list[0]]
-    for i in range(1, len(index_list)): new_index_list += [index_list[i]+length_list[i-1]]
-    features_cat = torch.cat(features_list, dim=0)
-    index_cat = torch.cat(index_list, dim=0)
-
-    l = 0
-    for length in length_list: l+=length
-
-    output = scatter(features_cat, index_cat, dim=0, dim_size=l, reduce="mean")
-    new_graphs = []
-    start = 0
-    for i in range(len(length_list)):
-        end = start + length_list[i]
-        new_graphs += [output[start:end]]
-        start = end
     return new_graphs
 
 
@@ -137,10 +103,11 @@ class BasicBlock(nn.Module):
             features_list += [neighbor_features]
             indices_list += [current_indices]
             length_list += [len(current_coors)]
+            total_len += len(current_coors)
 
         features, indices = self.small_to_large(features_list, indices_list, length_list)
         features = self.in_linear(features)
-        current_features = max_aggregation_fn(neighbor_features, current_indices, len(current_coors))
+        current_features = max_aggregation_fn(neighbor_features, indices, total_len
         return self.out_linear(current_features), length_list
 
 
