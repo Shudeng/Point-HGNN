@@ -244,7 +244,8 @@ class HGNN(nn.Module):
         """
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
-        assert len(points)==1
+        #assert len(points)==1
+        print("in backbone")
 
         coordinates = [kwargs["keypoints_{}".format(level)] for level in range(4)]
         indices = [kwargs["indices_{}".format(level)] for level in range(1,4)]
@@ -271,22 +272,71 @@ class HGNN(nn.Module):
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, graphs["1_0"])
 
         indices_1, indices_2, indices_3 = indices 
+        max_nums = []
+        for indices_i in indices:
+            max_num = -1e10
+            for indice in indices_i:
+                if max_num < len(indice): max_num = len(indice)
+            max_nums += [max_num]
+
         # since it's one batch now, we need to unsqueeze one dimension for the inputs of VoteHead.
         # fp_xyz: Layer x Batch x N x 3; fp_features: L x B x f x N; fp_indices: L x B x N.
 
+        """
+        for k, coors in enumerate(coordinates):
+            for l, coor in enumerate(coors):
+                print(k, l, coor.shape)
+        print("*"*20+"indices"+"*"*10)
+        for k, inds in enumerate(indices):
+            for l, ind in enumerate(inds):
+                print(k,l, ind.shape)
+        for l, point in enumerate(p1):
+            print(3, l, point.shape)
+        for l, point in enumerate(p2):
+            print(3, l, point.shape)
+        for l, point in enumerate(p3):
+            print(3, l, point.shape)
+        """
 
-        fp_xyz = [coordinates[3].unsqueeze(0), 
-                  coordinates[2].unsqueeze(0), 
-                  coordinates[1].unsqueeze(0)]
-
-        fp_features = [p3.unsqueeze(0).permute(0, 2, 1), 
-                       p2.unsqueeze(0).permute(0, 2, 1), 
-                       p1.unsqueeze(0).permute(0, 2, 1)]
 
 
-        fp_indices = [indices_3.unsqueeze(0), 
-                      indices_2.unsqueeze(0), 
-                      indices_1.unsqueeze(0)]
+        def padlist2tensor(listoftensors, max_num, pad_value):
+            for i in range(len(listoftensors)):
+                if pad_value != -1:
+                    listoftensors[i] = torch.cat([
+                                listoftensors[i], 
+                                listoftensors[i].new_ones(max_num-len(listoftensors[i]), *listoftensors[i].shape[1:])*pad_value
+                            ]).unsqueeze(0)
+                else: # pad indices
+                    print("listoftensors[i]", listoftensors[i].shape)
+                    print(listoftensors[i])
+                    listoftensors[i] = torch.cat([
+                                listoftensors[i], 
+                                torch.arange(len(listoftensors[i]), max_num).to(listoftensors[i].device)
+                            ]).unsqueeze(0)
+                    print(listoftensors[i])
+
+
+            return torch.cat(listoftensors, dim=0)
+
+
+
+        fp_xyz = [
+                padlist2tensor(coordinates[3], max_nums[2], 1e10),
+                padlist2tensor(coordinates[2], max_nums[1], 1e10),
+                padlist2tensor(coordinates[1], max_nums[0], 1e10)]
+
+        #print("padlist2tensor(p3, max_nums[2], 0).permute(0, 2, 1).shape",padlist2tensor(p3, max_nums[2], 0).permute(0, 2, 1).shape)
+        fp_features = [
+                padlist2tensor(p3, max_nums[2], 0).permute(0, 2, 1),
+                padlist2tensor(p2, max_nums[1], 0).permute(0, 2, 1),
+                padlist2tensor(p1, max_nums[0], 0).permute(0, 2, 1),
+                ]
+
+        fp_indices = [
+                padlist2tensor(indices_3, max_nums[2], 0), 
+                padlist2tensor(indices_2, max_nums[1], 0), 
+                padlist2tensor(indices_1, max_nums[0], 0)]
 
         feat_dict = {'fp_xyz': fp_xyz,
                 'fp_features': fp_features,
