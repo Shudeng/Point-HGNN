@@ -17,6 +17,7 @@ from dataset import MyDataset as build_dataset
 from mmdet3d.models import build_detector
 from mmdet3d.utils import collect_env, get_root_logger
 from mmdet.apis import set_random_seed, train_detector
+from train_detector import train_detector
 from utils import build_hgnn_backbone
 
 
@@ -161,6 +162,7 @@ def main():
     # add an attribute for visualization convenience
     model.CLASSES = datasets[0].CLASSES
     find_unused_parameters = cfg.get('find_unused_parameters', False)
+
 
     train_detector(
         model,

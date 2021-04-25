@@ -16,7 +16,7 @@ def multi_layer_neural_network_fn(Ks):
         linears += [
             nn.Linear(Ks[i - 1], Ks[i]),
             nn.ReLU(),
-            # nn.BatchNorm1d(Ks[i])
+            nn.BatchNorm1d(Ks[i])
         ]
     return nn.Sequential(*linears)
 
@@ -245,7 +245,6 @@ class HGNN(nn.Module):
 
         #assert len(points) == 1 and len(img_metas) == 1 and len(gt_bboxes_3d) == 1 and len(gt_labels_3d) == 1
         #assert len(points)==1
-        print("in backbone")
 
         coordinates = [kwargs["keypoints_{}".format(level)] for level in range(4)]
         indices = [kwargs["indices_{}".format(level)] for level in range(1,4)]

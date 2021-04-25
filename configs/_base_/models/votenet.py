@@ -69,4 +69,4 @@ model = dict(
 # model training and testing settings
 train_cfg = dict(pos_distance_thr=0.3, neg_distance_thr=0.6, sample_mod='vote')
 test_cfg = dict(
-    sample_mod='seed', nms_thr=0.25, score_thr=0.05, per_class_proposal=True)
+    sample_mod='seed', nms_thr=0.25, score_thr=0.05, per_class_proposal=True, max_num=50,use_rotate_nms=True)
