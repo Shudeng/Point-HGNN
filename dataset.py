@@ -99,7 +99,7 @@ class MyDataset(SUNRGBDDataset):
 
     def __getitem__(self, idx):
         res = self.dataset.__getitem__(idx)
-        return res
+        #return res
         points = res['points']
 
         if self.test_mode:
@@ -115,7 +115,7 @@ class MyDataset(SUNRGBDDataset):
             keypoints, indices = keypoints.float().to(self.device), indices.to(self.device)
             res["keypoints_{}".format(level+1)] = DC(keypoints)
             res["indices_{}".format(level+1)] = DC(indices)
-            print("keypoints.shape", keypoints.shape)
+            #print("keypoints.shape", keypoints.shape)
 
             coordinates += [keypoints]
 

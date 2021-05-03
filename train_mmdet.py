@@ -144,7 +144,7 @@ def main():
     model = build_detector(
         cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
 #    print("model", model)
-    #model.backbone = build_hgnn_backbone() 
+    model.backbone = build_hgnn_backbone() 
 
     logger.info(f'Model:\n{model}')
     datasets = [build_dataset(cfg.data.train)]

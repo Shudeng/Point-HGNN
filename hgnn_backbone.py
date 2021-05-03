@@ -32,10 +32,7 @@ def max_aggregation_fn(features, index, l):
         set_features: l x dim
     """
 
-    try:
-        output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l, reduce="mean")
-    except:
-        exit(0)
+    output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l, reduce="max")
     #set_features, argmax= output
     set_features = output
     return set_features
@@ -198,17 +195,39 @@ class HGNN(nn.Module):
 
         # self.linear = nn.Linear(10, 100)
         self.downsample1 = DownsampleBlock(in_inter_channels=(4+3, 32, 64), out_inter_channels=(64, 64))
-        self.graph1 = GraphBlock(in_inter_channels=(64 + 3, 64), out_inter_channels=(64, 64),
-                                   after_cat_inter_channels=(64, 64))
+
+        self.graph1s = nn.ModuleList()
+        for _ in range(3):
+            self.graph1s.append(GraphBlock(in_inter_channels=(64 + 3, 64), out_inter_channels=(64, 64), 
+                                   after_cat_inter_channels=(64, 64)) )
         self.downsample2 = DownsampleBlock((64 + 3, 128), (128, 128))
-        self.graph2 = GraphBlock((128 + 3, 128), (128, 128), (128, 128))
+
+        self.graph2s = nn.ModuleList()
+        for _ in range(3):
+            self.graph2s.append( GraphBlock((128 + 3, 128), (128, 128), (128, 128)) )
+
+
         self.downsample3 = DownsampleBlock((128 + 3, 300), (300, 300))
-        self.graph3 = GraphBlock((300 + 3, 300), (300, 300), (300, 300))
+
+        self.graph3s = nn.ModuleList()
+        for _ in range(3):
+            self.graph3s.append( GraphBlock((300 + 3, 300), (300, 300), (300, 300)))
+
         self.upsample1 = UpsampleBlock(in_inter_channels=(303, 128), out_inter_channels=(128, 128),
                                        before_cat_inter_channels=(128, 128), after_cat_inter_channels=(128, 128))
-        self.graph2_update = GraphBlock((128 + 3, 128), (128, 128), (128, 128))
+
+
+        self.graph2_updates = nn.ModuleList()
+        for _ in range(3):
+            self.graph2_updates.append( GraphBlock((128 + 3, 128), (128, 128), (128, 128)) )
+
+
         self.upsample2 = UpsampleBlock((128 + 3, 64), (64, 64), (64, 64), (64, 64))
-        self.graph1_update = GraphBlock((64 + 3, 64), (64, 64), (64, 64))
+        self.graph1_updates = nn.ModuleList()
+        for _ in range(3):
+            self.graph1_updates.append(  GraphBlock((64 + 3, 64), (64, 64), (64, 64)) )
+
+
         self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
 
     def get_levels_coordinates(self, point_coordinates, voxel_sizes):
@@ -257,17 +276,35 @@ class HGNN(nn.Module):
                               current_coors=coordinates[1], edge=graphs["graph_0_1"])
 
         edge = graphs["graph_0_1"][0]
+        encode_p1 = p1
 
-        encode_p1 = self.graph1(coors=coordinates[1], features=p1, edge=graphs["graph_1_1"])
+        for i in range(len(self.graph1s)):
+            encode_p1 = self.graph1s[i](coors=coordinates[1], features=encode_p1, edge=graphs["graph_1_1"])
+
         p2 = self.downsample2(coordinates[1], encode_p1, coordinates[2], graphs["graph_1_2"])
-        encode_p2 = self.graph2(coordinates[2], p2, graphs["graph_2_2"])
+
+        encode_p2 = p2
+        for i in range(len(self.graph2s)):
+            encode_p2 = self.graph2s[i](coordinates[2], encode_p2, graphs["graph_2_2"])
+
         p3 = self.downsample3(coordinates[2], encode_p2, coordinates[3], graphs["graph_2_3"])
-        p3 = self.graph3(coordinates[3], p3, graphs["graph_3_3"])
+
+        for i in range(len(self.graph3s)):
+            p3 = self.graph3s[i](coordinates[3], p3, graphs["graph_3_3"])
+
+
         decode_p2 = self.upsample1(current_coors=coordinates[3], current_features=p3,
                                    last_coors=coordinates[2], last_features=encode_p2, edge=graphs["graph_3_2"])
-        p2 = self.graph2_update(coordinates[2], decode_p2, graphs["graph_2_2"])
+
+        p2 = decode_p2
+
+        for i in range(len(self.graph2_updates)):
+            p2 = self.graph2_updates[i](coordinates[2], p2, graphs["graph_2_2"])
+
         decode_p1 = self.upsample2(coordinates[2], p2, coordinates[1], encode_p1, graphs["graph_2_1"])
-        p1 = self.graph1_update(coordinates[1], decode_p1, graphs["graph_1_1"])
+        p1 = decode_p1
+        for i in range(len(self.graph1_updates)):
+            p1 = self.graph1_updates[i](coordinates[1], p1, graphs["graph_1_1"])
         # p0 = self.upsample3(coordinates[1], p1, coordinates[0], points, graphs["1_0"])
 
         indices_1, indices_2, indices_3 = indices 
