@@ -32,6 +32,7 @@ def max_aggregation_fn(features, index, l):
         set_features: l x dim
     """
 
+
     output = scatter(features.contiguous(), index.contiguous(), dim=0, dim_size=l, reduce="max")
     #set_features, argmax= output
     set_features = output
@@ -91,6 +92,11 @@ class BasicBlock(nn.Module):
         for i in range(len(edge)):
             current_indices = edge[i][0, :].long()
             last_indices = edge[i][1, :].long()
+
+            """
+            print("current_indices.max()", current_indices.max())
+            print("last_indices.max()", last_indices.max())
+            """
 
             center_coors = current_coors[i][current_indices]  # E x 3
             neighbor_coors = last_coors[i][last_indices]  # E x 3
@@ -194,41 +200,41 @@ class HGNN(nn.Module):
         #self.test_cfg = cfg['test_cfg']
 
         # self.linear = nn.Linear(10, 100)
-        self.downsample1 = DownsampleBlock(in_inter_channels=(4+3, 32, 64), out_inter_channels=(64, 64))
+        self.downsample1 = DownsampleBlock(in_inter_channels=(4+3, 32, 64, 128, 300), out_inter_channels=(300, 300))
 
         self.graph1s = nn.ModuleList()
         for _ in range(3):
-            self.graph1s.append(GraphBlock(in_inter_channels=(64 + 3, 64), out_inter_channels=(64, 64), 
-                                   after_cat_inter_channels=(64, 64)) )
-        self.downsample2 = DownsampleBlock((64 + 3, 128), (128, 128))
+            self.graph1s.append(GraphBlock(in_inter_channels=(300 + 3, 300), out_inter_channels=(300, 300), 
+                                   after_cat_inter_channels=(300, 300)) )
+        self.downsample2 = DownsampleBlock((300 + 3, 300), (300, 300))
 
         self.graph2s = nn.ModuleList()
         for _ in range(3):
-            self.graph2s.append( GraphBlock((128 + 3, 128), (128, 128), (128, 128)) )
+            self.graph2s.append( GraphBlock((300 + 3, 300), (300, 300), (300, 300)) )
 
 
-        self.downsample3 = DownsampleBlock((128 + 3, 300), (300, 300))
+        self.downsample3 = DownsampleBlock((300 + 3, 300), (300, 300))
 
         self.graph3s = nn.ModuleList()
         for _ in range(3):
             self.graph3s.append( GraphBlock((300 + 3, 300), (300, 300), (300, 300)))
 
-        self.upsample1 = UpsampleBlock(in_inter_channels=(303, 128), out_inter_channels=(128, 128),
-                                       before_cat_inter_channels=(128, 128), after_cat_inter_channels=(128, 128))
+        self.upsample1 = UpsampleBlock(in_inter_channels=(303, 300), out_inter_channels=(300, 300),
+                                       before_cat_inter_channels=(300, 300), after_cat_inter_channels=(300,300))
 
 
         self.graph2_updates = nn.ModuleList()
         for _ in range(3):
-            self.graph2_updates.append( GraphBlock((128 + 3, 128), (128, 128), (128, 128)) )
+            self.graph2_updates.append( GraphBlock((300 + 3, 300), (300, 300), (300, 300)) )
 
 
-        self.upsample2 = UpsampleBlock((128 + 3, 64), (64, 64), (64, 64), (64, 64))
+        self.upsample2 = UpsampleBlock((300 + 3, 300), (300,  300), (300, 300), ( 300,300))
         self.graph1_updates = nn.ModuleList()
         for _ in range(3):
-            self.graph1_updates.append(  GraphBlock((64 + 3, 64), (64, 64), (64, 64)) )
+            self.graph1_updates.append(  GraphBlock((300 + 3, 300), (300,300), (300, 300)) )
 
 
-        self.upsample3 = UpsampleBlock((64 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
+        #self.upsample3 = UpsampleBlock((300 + 3, 32), (32, 16), (4, 16), (16, 4))  # not utilized
 
     def get_levels_coordinates(self, point_coordinates, voxel_sizes):
         """

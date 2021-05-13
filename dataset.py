@@ -35,9 +35,15 @@ class MyDataset(SUNRGBDDataset):
 
 
         self.max_num_neighbors = 256
+        """
         self.downsample_voxel_sizes = [[0.1, 0.1, 0.1], [0.2, 0.2, 0.2], [0.3, 0.3, 0.3]]
         self.inter_radius = [0.3, 0.5, 0.7]
         self.intra_radius = [0.4, 0.6, 0.8]
+        """
+
+        self.downsample_voxel_sizes = [[0.05, 0.05, 0.05], [0.15, 0.15, 0.15], [0.3, 0.3, 0.3]]
+        self.inter_radius = [0.1, 0.2, 0.35]
+        self.intra_radius = [0.15, 0.25, 0.4]
 
         self.device="cpu"
         """
@@ -73,7 +79,7 @@ class MyDataset(SUNRGBDDataset):
         batch_x = torch.tensor([0]*len(points)).to(points.device)
         batch_y = torch.tensor([0]*len(key_points)).to(key_points.device)
 
-        downsample_graph = radius(points, key_points, radiu, batch_x, batch_y, max_num_neighbors=max_num_neighbors)
+        downsample_graph = radius(points, key_points, radiu, batch_x, batch_y, max_num_neighbors=self.max_num_neighbors)
         # upsample_graph = radius(key_points, points, radiu, batch_y, batch_x, max_num_neighbors=max_num_neighbors)
         #upsample_graph = downsample_graph[[1, 0], :]
         #return downsample_graph.to(points.device), upsample_graph.to(points.device)
